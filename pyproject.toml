@@ -11,6 +11,8 @@ dependencies = [
     "pydantic-settings>=2.6",
     "openai>=1.55",
     "python-multipart>=0.0.12",
+    "sentence-transformers>=3.0",
+    "torch>=2.7",
 ]
 
 [dependency-groups]
@@ -23,6 +25,15 @@ dev = [
 # Application project (not a distributable package): install deps only.
 [tool.uv]
 package = false
+
+# PyTorch CUDA (cu128) wheels for GPU (RTX 3090). Windows-targeted dev.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
 
 [tool.ruff]
 line-length = 100

@@ -5,12 +5,16 @@ and the /health endpoint. Feature routes are mounted in later phases.
 """
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from app.api.errors import register_exception_handlers
 from app.api.middleware import register_middleware
+from app.api.routes import embeddings
 from app.config import Settings, get_settings
+
+logger = logging.getLogger("ssairen.startup")
 
 
 def _configure_logging() -> None:
@@ -18,6 +22,18 @@ def _configure_logging() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s | %(message)s",
     )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    if settings.embedding_warmup:
+        from app.services.embedder import warmup
+
+        logger.info("warming up embedding model: %s", settings.embedding_model)
+        warmup()
+        logger.info("embedding model ready")
+    yield
 
 
 def create_app() -> FastAPI:
@@ -29,10 +45,12 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         description="싸이렌 AI 서버 (internal, BE→AI). Not exposed publicly.",
         docs_url="/docs",
+        lifespan=lifespan,
     )
 
     register_middleware(app)
     register_exception_handlers(app)
+    app.include_router(embeddings.router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict:

@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="BAAI/bge-m3")
     embedding_device: str = Field(default="cuda", description="cuda | cpu")
     embedding_dimension: int = Field(default=1024)
+    embedding_warmup: bool = Field(default=True, description="Load model at startup")
+    embedding_max_batch: int = Field(default=128, description="Max texts per request")
 
     # --- Domain thresholds (defaults; BE owns final policy) ---
     chatbot_answer_temperature: float = Field(default=0.3)
