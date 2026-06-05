@@ -30,7 +30,7 @@ async def test_plan_search_nearby(monkeypatch):
     result = ChatPlanResult.model_validate(
         {
             "action": "SEARCH_NEARBY",
-            "params": {"categoryCode": None, "radiusMeters": 500, "status": None},
+            "params": {"categoryCode": None, "radiusMeters": 500},
             "answer": None,
         }
     )
@@ -111,7 +111,7 @@ def test_plan_route(monkeypatch):
         return ChatPlanResult.model_validate(
             {
                 "action": "ANSWER_DIRECT",
-                "params": {"categoryCode": None, "radiusMeters": None, "status": None},
+                "params": {"categoryCode": None, "radiusMeters": None},
                 "answer": "안녕하세요!",
             }
         )

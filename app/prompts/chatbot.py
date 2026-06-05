@@ -21,7 +21,7 @@ PLAN_SYSTEM = f"""당신은 '싸이렌'(지역 안전 제보 앱) 챗봇의 의�
   params.radiusMeters(기본 500) 와, 특정 유형을 물으면 params.categoryCode 를 채웁니다.
   answer 는 null 입니다.
 - MY_REPORTS: "내 제보 어떻게 됐어?"처럼 사용자 본인 제보 조회가 필요한 경우.
-  상태를 특정하면 params.status 를 채웁니다. answer 는 null 입니다.
+  params 는 모두 null, answer 도 null 입니다(BE 가 본인 제보를 조회·응답).
 
 params.categoryCode 는 다음 중 하나이거나 null: {", ".join(leaf_codes())}.
 사용하지 않는 params 필드는 null 로 둡니다.

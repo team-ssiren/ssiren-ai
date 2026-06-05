@@ -34,7 +34,6 @@ class ChatAction(StrEnum):
 class PlanParams(BaseModel):
     categoryCode: CategoryCode | None
     radiusMeters: int | None
-    status: str | None
 
 
 class ChatPlanRequest(BaseModel):

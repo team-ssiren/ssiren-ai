@@ -294,8 +294,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
   "action": "SEARCH_NEARBY",
   "params": {
     "categoryCode": null,
-    "radiusMeters": 500,
-    "status": null
+    "radiusMeters": 500
   },
   "answer": null
 }
@@ -306,10 +305,9 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | Field | Type | Description |
 | --- | --- | --- |
 | action | `String(enum)` | `ANSWER_DIRECT` / `SEARCH_NEARBY` / `MY_REPORTS` |
-| params | `Object` | BE 가 수행할 검색 파라미터(사용 안 하는 필드는 `null`) |
+| params | `Object` | SEARCH_NEARBY 검색 파라미터(그 외 action 은 모두 `null`) |
 | params.categoryCode | `String(enum)` | 유형 필터(공통 enum) 또는 `null` |
 | params.radiusMeters | `Integer` | SEARCH_NEARBY 검색 반경(기본 500) 또는 `null` |
-| params.status | `String` | MY_REPORTS 상태 필터 또는 `null` |
 | answer | `String` | `ANSWER_DIRECT` 일 때만 채워지는 응답 문구. 그 외 `null` |
 
 > BE 처리: `ANSWER_DIRECT` 면 `answer` 를 그대로 사용하고 종료. `SEARCH_NEARBY`/`MY_REPORTS` 면 `params` 로 자체 검색 후 Step 2(answer) 호출.
