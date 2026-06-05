@@ -11,7 +11,7 @@ from fastapi import FastAPI
 
 from app.api.errors import register_exception_handlers
 from app.api.middleware import register_middleware
-from app.api.routes import embeddings, reports
+from app.api.routes import chatbot, embeddings, reports
 from app.config import Settings, get_settings
 
 logger = logging.getLogger("ssairen.startup")
@@ -52,6 +52,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(embeddings.router)
     app.include_router(reports.router)
+    app.include_router(chatbot.router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict:
