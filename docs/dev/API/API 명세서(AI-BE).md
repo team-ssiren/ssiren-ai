@@ -1,16 +1,25 @@
-# 공통 기반
+# API 명세서 (AI-BE)
 
-## 아키텍처 원칙
-- **AI 서버 = FastAPI, stateless 연산 서버.** DB 없음, 세션 저장 없음.
-- **호출 방향: BE(Spring) → AI 단방향.** AI는 BE를 역호출하지 않음. 외부 미노출(`/internal/v1`), 토큰 검증은 BE가 이미 처리.
-- **LLM = OpenAI** (GPT-5.5, 모델명 env로 분리). `temperature=0` + structured output으로 결정성 확보.
-- **임베딩 = `BAAI/bge-m3`** (1024차원), AI 서버가 벡터만 생성. 코사인/저장/임계값은 BE(pgvector).
+Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명세.
 
-## BE ↔ AI 책임 분담
+## 개요
+
+| 항목 | 내용 |
+| --- | --- |
+| 호출 방향 | **BE → AI 단방향** (AI 는 BE 를 역호출하지 않음) |
+| 노출 범위 | 내부 전용(`/internal/v1`), 외부 미노출 |
+| 인증 | **없음** (BE 가 사용자 인증을 이미 처리, AI 는 신뢰된 내부 호출만 수신) |
+| 상태 | **Stateless** — DB·세션 저장 없음. 대화/지식 맥락은 매 요청에 BE 가 전달 |
+| LLM | OpenAI (모델명 env, 기본 `gpt-5.5`). Structured Outputs(enum 강제)로 결정성 확보 |
+| 임베딩 | `BAAI/bge-m3` (1024차원, L2 정규화). AI 는 벡터만 생성, 코사인/저장/임계값은 BE |
+| Base URL | `http://{ai-host}:{port}` (예: `http://localhost:8000`) |
+
+### BE ↔ AI 책임 분담
+
 | 항목 | AI | BE |
-|---|---|---|
+| --- | --- | --- |
 | 멀티모달 분석·생성(제목/육하원칙/요약/키워드) | ✅ | |
-| 카테고리 분류(코드), agencyType 힌트 | ✅ | ID 매핑 |
+| 카테고리 분류(코드), 기관유형 힌트 | ✅ | 코드→ID 매핑 |
 | 위험도 점수 | ✅ 산정 | 규칙 보정(선택) |
 | 임베딩 벡터 생성 | ✅ | 저장·유사도·임계값 |
 | 역지오코딩(좌표→주소) | | ✅ |
@@ -18,142 +27,464 @@
 | 중복 후보 1차 필터(반경/시간) | | ✅ |
 | 챗봇 세션·메시지 저장, retrieval | | ✅ |
 
-## 택소노미 (SSOT: `core/taxonomy.py`)
-- **2단계, 코드 기반.** AI는 **리프 코드 1개만** enum으로 선택, 상위·부서·기관유형은 테이블에서 파생.
-- 각 리프 보유 필드: `code / ko / parent / default_agency_type / default_department / 정의 / 포함예 / 제외예`
-- 리프 세트(초안): `ILLEGAL_PARKING, ROAD_DAMAGE, TRASH_DUMPING, ANIMAL_CARCASS, NOISE, STREETLIGHT, DANGEROUS_FACILITY, FALL_RISK, DRUNK_PERSON, YOUTH_RISK, SUSPICIOUS, HOMELESS, FIRE_EMERGENCY, ETC_OTHER`
-- **위험도 스케일 0~100.**
+### 엔드포인트 요약
 
-## 공통 응답 규약
-- 모든 LLM 호출은 **OpenAI Structured Outputs(JSON Schema, enum 강제)** 사용 → 표기 흔들림·리스트 밖 값·필드 누락 차단.
+| 도메인 | 기능 | HTTP 메서드 | API Path | 형식 |
+| --- | --- | --- | --- | --- |
+| 분석 | ① 구조화 제보 분석 | POST | /internal/v1/reports:analyze | multipart/form-data |
+| 임베딩 | ② 텍스트 임베딩(백필/재계산) | POST | /internal/v1/embeddings | application/json |
+| 챗봇 | ③ 의도 라우팅(plan) | POST | /internal/v1/chatbot:plan | application/json |
+| 챗봇 | ③ 근거 기반 응답(answer) | POST | /internal/v1/chatbot:answer | application/json |
+| 메타 | 헬스 체크 | GET | /health | - |
+| 메타 | 운영 메트릭 | GET | /metrics | - |
+
+### 공통 enum
+
+**categoryCode** (리프, AI 는 이 중 하나만 선택)
+
+| code | 한글 | 대분류(parent) | 기본 기관유형 | 기본 부서 |
+| --- | --- | --- | --- | --- |
+| ILLEGAL_PARKING | 불법주정차 | 교통 | 지자체 | 교통행정과 |
+| ROAD_DAMAGE | 도로 파손 | 교통 | 지자체 | 도로관리과 |
+| TRASH_DUMPING | 쓰레기 무단투기 | 환경 | 지자체 | 청소행정과 |
+| ANIMAL_CARCASS | 동물 사체 | 환경 | 지자체 | 청소행정과 |
+| NOISE | 소음 | 환경 | 지자체 | 환경과 |
+| STREETLIGHT | 가로등 고장 | 시설물 | 지자체 | 도시안전과 |
+| DANGEROUS_FACILITY | 위험 시설물 | 시설물 | 지자체 | 시설관리과 |
+| FALL_RISK | 낙상 위험 | 생활불편 | 지자체 | 시설관리과 |
+| DRUNK_PERSON | 주취자 | 치안 | 경찰 | 관할 지구대 |
+| YOUTH_RISK | 청소년 위험 | 치안 | 경찰 | 관할 지구대 |
+| SUSPICIOUS | 수상한 상황 | 치안 | 경찰 | 관할 지구대 |
+| HOMELESS | 노숙 | 복지 | 지자체 | 복지정책과 |
+| FIRE_EMERGENCY | 화재/응급 | 재난안전 | 소방 | 119안전센터 |
+| ETC_OTHER | 기타 | 기타 | 지자체 | 민원실 |
+
+**suggestedAgencyType**: `지자체` | `경찰` | `소방`
+**action** (챗봇 plan): `ANSWER_DIRECT` | `SEARCH_NEARBY` | `MY_REPORTS`
 
 ---
 
-# ① 구조화된 제보 생성 (Analyze)
+## ① 구조화 제보 분석
 
-### 구현 방법
-멀티모달 1콜: 이미지(들) + 원문 텍스트 + BE가 준 주소 컨텍스트 → OpenAI Vision + Structured Output → 구조화 JSON. 임베딩은 같은 요청에서 함께 생성해 반환(왕복 절약).
+사진·텍스트·위치를 분석해 구조화된 제보 데이터를 생성한다. AI 는 분류/생성/위험도/허위·긴급 판단과 임베딩까지 반환하며, 역지오코딩·기관 실인스턴스·저장은 BE 가 담당한다. **DB에 저장하지 않는다.**
 
-### 구현 세부
-- **입력 가공**: multipart 이미지 → base64 data URL로 OpenAI에 전달. `roadAddress/sido/sigungu/dong`을 프롬프트에 주입해 `where` 정확도↑.
-- **분류**: 리프 `categoryCode` enum 강제 + `confidence`. 타이브레이크 규칙(동물사체→환경, 주취자→치안, 가로등→시설물)을 프롬프트에 명시. 애매 시 `ETC_OTHER`.
-- **기관 힌트**: `suggestedAgencyType`은 택소노미 default에서 도출, 다부서 걸칠 때만 `agencyTypeReason`으로 override.
-- **위험도**: LLM이 0~100 산정(카테고리 위험성·이미지 심각도·긴급성 반영). (선택) BE가 제보수·공감수·최근성으로 후보정.
-- **허위/장난 탐지**: `falseReport{isSuspicious, score, reason}` — 이미지-텍스트 불일치/욕설/무관 이미지.
-- **긴급 가드**: `emergencyGuide{isEmergency, message}` — 실제 화재/범죄/응급이면 앱 접수보다 112/119 우선 안내.
-- **이미지 객체 인식**: `detectedObjects[]`.
-- **결정성**: `temperature=0`, 동일 스키마.
+### Example request
 
-### API 계약 — `POST /internal/v1/reports:analyze`
-**요청** (`multipart/form-data`)
-| field | type | 설명 |
-|---|---|---|
-| content | string | 원문 텍스트 |
-| latitude / longitude | float | 좌표 |
-| occurredAt | string? | 미입력 시 서버시각 |
-| roadAddress, sido, sigungu, eupmyeondong | string? | BE 역지오코딩 결과 |
-| images | file[] | 제보 이미지 |
+`POST /internal/v1/reports:analyze`
 
-**응답**
+### Headers
+
+| Header | Type | Required | Description |
+| --- | --- | --- | --- |
+| Content-Type | `String` | Yes | `multipart/form-data` |
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+|   |   |   |   |
+
+### Path Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+|   |   |   |   |
+
+### Request Body
+
+`multipart/form-data`
+
 ```json
 {
-  "title": "둔산동 갤러리아 앞 인도 파손으로 인한 보행 안전 위험",
-  "contents": {
-    "who":"보행 중인 시민","when":"2026-05-28T07:40:00",
-    "where":"둔산동 갤러리아 앞 인도","what":"인도 블록 파손으로 낙상 위험",
-    "how":"우천 물고임+보도블록 파손","why":"낙상·부상 가능성","summary":"..."
-  },
-  "keywords": ["인도 파손","보행 위험","낙상 위험"],
-  "category": { "categoryCode":"ROAD_DAMAGE", "confidence":0.92 },
-  "suggestedAgencyType": "지자체",
-  "agencyTypeReason": null,
-  "riskScore": 62.5,
-  "analysis": {
-    "detectedObjects": ["보도블록","균열","물고임"],
-    "falseReport": { "isSuspicious":false, "score":8.2, "reason":"이미지-텍스트 연관성 높음" },
-    "emergencyGuide": { "isEmergency":false, "message":null }
-  },
-  "embedding": [/* bge-m3 1024차원 */]
+  "content": "맨홀이 깨져있어요",
+  "latitude": 36.3519123,
+  "longitude": 127.3785214,
+  "occurredAt": "2026-06-05T15:30:00",
+  "roadAddress": "대전광역시 서구 둔산로 1036",
+  "sido": "대전광역시",
+  "sigungu": "서구",
+  "eupmyeondong": "둔산동",
+  "images": ["MultipartFile", "MultipartFile"]
 }
 ```
-→ BE가 `categoryCode`로 `categoryId/parentCategory/departmentName`·실기관 매핑, `roadAddress` 등은 자기 값 사용, `embedding`은 중복판단·저장에 사용.
+
+### Request Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| content | `String` | Yes | 사용자가 입력한 원본 제보 텍스트 |
+| latitude | `Decimal` | Yes | 제보 위치 위도 |
+| longitude | `Decimal` | Yes | 제보 위치 경도 |
+| occurredAt | `String` | No | 발생 시각(ISO-8601). 미입력 시 서버 현재 시각 사용 |
+| roadAddress | `String` | No | BE 가 역지오코딩한 도로명 주소(분석 정확도 향상용) |
+| sido | `String` | No | 시/도 |
+| sigungu | `String` | No | 시/군/구 |
+| eupmyeondong | `String` | No | 읍/면/동 |
+| images | `MultipartFile[]` | No | 제보 이미지. 0~5장, 장당 최대 10MB, `image/*` |
+
+### Response Body
+
+```json
+{
+  "title": "보도 위 맨홀 뚜껑 파손",
+  "contents": {
+    "who": "확인되지 않음",
+    "when": "2026-06-05T15:30:00",
+    "where": "대전광역시 서구 둔산로 1036",
+    "what": "맨홀 뚜껑 파손 및 보도 안전 위험",
+    "how": "맨홀 뚜껑이 파손되어 구멍이 노출됨",
+    "why": "보행자 추락·부상 위험이 있어 보수가 필요함",
+    "summary": "대전광역시 서구 둔산로 1036 인근 보도에 맨홀 뚜껑이 파손되어 보행자 안전 위험이 있습니다."
+  },
+  "keywords": ["맨홀 파손", "도로 파손", "보도 위험", "추락 위험"],
+  "category": {
+    "categoryCode": "ROAD_DAMAGE",
+    "confidence": 0.96
+  },
+  "suggestedAgencyType": "지자체",
+  "agencyTypeReason": null,
+  "riskScore": 72.0,
+  "analysis": {
+    "detectedObjects": ["파손된 맨홀 뚜껑", "보도블록", "균열", "구멍"],
+    "falseReport": {
+      "isSuspicious": false,
+      "score": 5.0,
+      "reason": "이미지와 텍스트의 연관성이 높습니다."
+    },
+    "emergencyGuide": {
+      "isEmergency": false,
+      "message": null
+    }
+  },
+  "embedding": [0.013, -0.024, "...(총 1024개)"]
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| title | `String` | AI 가 생성한 제보 제목(한 줄) |
+| contents | `Object` | 육하원칙 기반 제보 본문 |
+| contents.who | `String` | 문제와 관련된 주체. 불명 시 "확인되지 않음" |
+| contents.when | `String` | 문제 발생/확인 시각 |
+| contents.where | `String` | 발생 위치 설명(제공된 주소 활용) |
+| contents.what | `String` | 발생한 문제 유형/내용 |
+| contents.how | `String` | 문제가 발생한 방식 또는 현재 상태 |
+| contents.why | `String` | 위험하거나 조치가 필요한 이유 |
+| contents.summary | `String` | 상황을 한 문장으로 요약 |
+| keywords | `String[]` | 핵심 키워드(3~6개) |
+| category | `Object` | 분류 결과 |
+| category.categoryCode | `String(enum)` | 리프 카테고리 코드(공통 enum 참조) |
+| category.confidence | `Decimal` | 분류 확신도(0.0~1.0) |
+| suggestedAgencyType | `String(enum)` | 추천 기관유형(지자체/경찰/소방). 기본은 카테고리 기본값 |
+| agencyTypeReason | `String` | 기본값을 덮어쓴 경우 사유. 기본값이면 `null` |
+| riskScore | `Decimal` | 위험 점수(0~100) |
+| analysis | `Object` | AI 분석 부가 결과 |
+| analysis.detectedObjects | `String[]` | 이미지에서 감지된 객체. 이미지 없으면 `[]` |
+| analysis.falseReport | `Object` | 허위·장난 제보 의심 결과 |
+| analysis.falseReport.isSuspicious | `Boolean` | 허위·장난 제보 의심 여부 |
+| analysis.falseReport.score | `Decimal` | 허위 의심 점수(0~100, 높을수록 의심) |
+| analysis.falseReport.reason | `String` | 판단 사유 |
+| analysis.emergencyGuide | `Object` | 긴급 신고 안내 |
+| analysis.emergencyGuide.isEmergency | `Boolean` | 긴급 상황 여부 |
+| analysis.emergencyGuide.message | `String` | 긴급 시 112/119 안내 문구. 아니면 `null` |
+| embedding | `Decimal[]` | bge-m3 임베딩 벡터(1024차원, L2 정규화). BE 가 중복판단·저장에 사용 |
+
+> BE 처리: `categoryCode` 로 `categoryId`·`parentCategory`·`departmentName`·실기관을 매핑하고, 주소(`roadAddress` 등)는 자체 역지오코딩 값을 사용한다. `embedding` 은 별도 임베딩 호출 없이 중복판단/저장에 바로 활용한다.
 
 ---
 
-# ② 유사 제보 병합 (Embeddings)
+## ② 텍스트 임베딩
 
-### 구현 방법
-AI는 **벡터 생성만**. 병합 판단 파이프라인은 BE가 소유. ①에서 신규 제보 임베딩은 이미 받으므로, 이 엔드포인트는 **백필·재계산용**.
+`title + summary + keywords` 결합 규칙으로 만든 텍스트를 bge-m3 벡터로 변환한다. ① 분석 응답에 이미 임베딩이 포함되므로, 이 엔드포인트는 **기존 제보 백필·재계산용**이다.
 
-### 구현 세부
-- **모델**: `BAAI/bge-m3`, 1024차원. AI 서버 기동 시 1회 로드(싱글톤).
-- **임베딩 대상 텍스트**: `title + summary + keywords` 결합(또는 정책 합의값) — ①과 ② 동일 규칙 사용해야 벡터 공간 일치.
-- **정규화**: L2 normalize 후 반환 → BE는 내적=코사인.
-- **BE 측 병합 로직(참고)**: ⓐ 반경 100m + 7일 + 동일 parent 카테고리로 후보 필터 → ⓑ 코사인 ≥ 임계값(예 0.80)이면 기존 이슈그룹 합류, 아니면 신규 → ⓒ 합류 시 reportCount/recentReportedAt 갱신. (DP-001/007/011, 10.3)
+### Example request
 
-### API 계약 — `POST /internal/v1/embeddings`
-**요청**
+`POST /internal/v1/embeddings`
+
+### Headers
+
+| Header | Type | Required | Description |
+| --- | --- | --- | --- |
+| Content-Type | `String` | Yes | `application/json` |
+
+### Request Body
+
 ```json
-{ "texts": ["둔산동 인도 파손으로 낙상 위험 ...", "..."] }
+{
+  "texts": [
+    "둔산동 인도 파손으로 낙상 위험\n둔산동 갤러리아 앞 인도 파손\n인도 파손 보행 위험",
+    "도로 위 동물 사체 방치\n로드킬 사체로 통행 위험\n동물 사체 환경"
+  ]
+}
 ```
-**응답**
+
+### Request Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| texts | `String[]` | Yes | 임베딩할 텍스트 목록(1~128개) |
+
+### Response Body
+
 ```json
-{ "model":"bge-m3", "dimension":1024, "embeddings": [[/* ... */],[/* ... */]] }
+{
+  "model": "bge-m3",
+  "dimension": 1024,
+  "embeddings": [
+    [0.011, -0.022, "...(1024)"],
+    [0.034, 0.005, "...(1024)"]
+  ]
+}
 ```
+
+### Response Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| model | `String` | 임베딩 모델명(`bge-m3`) |
+| dimension | `Integer` | 벡터 차원(1024) |
+| embeddings | `Decimal[][]` | 입력 순서대로의 L2 정규화 임베딩 벡터 목록 |
 
 ---
 
-# ③ 챗봇 (2-스텝)
+## ③ 챗봇 — Step 1 (plan)
 
-### 구현 방법
-BE 주도 2-스텝 루프. AI는 stateless 생성기. 대화 맥락(`history`)·지식 맥락(`context`)은 **매 요청에 BE가 실어 보냄**.
+질문과 대화 맥락을 보고 `action` 을 라우팅한다. `ANSWER_DIRECT` 면 검색 없이 `answer` 를 직접 반환(1콜 종료), 그 외에는 BE 가 수행할 검색 `params` 를 반환한다.
 
-### 구현 세부
-- **Step 1 (plan)**: 질문+이력 → `action` enum 라우팅. `ANSWER_DIRECT`면 answer까지 반환해 1콜 종료(잡담·일반질문). 검색 필요 시 `params`만 반환.
-- **Step 2 (answer)**: BE가 검색한 `context.reports` 기반 생성. **grounding 고정** — 주어진 사실만 사용, 없으면 "주변 제보 없음"으로 답하고 환각 금지. `usedReportIds` 반환.
-- **history 윈도우**: BE가 최근 6~10턴만 전달.
-- **긴급 가드**: 대화 중 응급 묘사 시 112/119 우선 안내.
-- **결정성**: plan은 `temperature=0`+enum, answer는 자연스러움 위해 낮은 temperature(예 0.3).
+### Example request
 
-### API 계약 — Step 1 `POST /internal/v1/chatbot:plan`
-**요청**
-```json
-{ "question":"이 근처 위험한 제보 있어?",
-  "history":[{"role":"user","content":"..."},{"role":"assistant","content":"..."}],
-  "userLocation":{"lat":36.36,"lng":127.34} }
-```
-**응답**
-```json
-{ "action":"SEARCH_NEARBY", "params":{"categoryCode":null,"radiusMeters":500}, "answer":null }
-```
-| action | params | BE 동작 |
-|---|---|---|
-| `ANSWER_DIRECT` | — | 검색 없음, `answer` 사용 후 종료 |
-| `SEARCH_NEARBY` | categoryCode?, radiusMeters? | 반경 내 이슈 검색 |
-| `MY_REPORTS` | status? | 유저 제보 조회 |
+`POST /internal/v1/chatbot:plan`
 
-### API 계약 — Step 2 `POST /internal/v1/chatbot:answer`
-**요청**
+### Headers
+
+| Header | Type | Required | Description |
+| --- | --- | --- | --- |
+| Content-Type | `String` | Yes | `application/json` |
+
+### Request Body
+
 ```json
-{ "question":"이 근처 위험한 제보 있어?",
-  "history":[/* ... */],
-  "context":{ "scope":"SEARCH_NEARBY",
-    "reports":[{"reportId":15,"title":"궁동 도로 파손","summary":"...","category":"도로 파손",
-                "address":"유성구 궁동","riskScore":66.0,"distanceMeters":120,"recentReportedAt":"2026-06-05T15:35:00"}] } }
+{
+  "question": "이 근처에 위험한 제보 있어?",
+  "history": [
+    { "role": "user", "content": "안녕" },
+    { "role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?" }
+  ],
+  "userLocation": { "lat": 36.36, "lng": 127.34 }
+}
 ```
-**응답**
+
+### Request Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| question | `String` | Yes | 사용자 질문 |
+| history | `Object[]` | No | 대화 이력. BE 가 최근 N턴만 전달 |
+| history[].role | `String` | Yes | `user` 또는 `assistant` |
+| history[].content | `String` | Yes | 메시지 내용 |
+| userLocation | `Object` | No | 사용자 위치 |
+| userLocation.lat | `Decimal` | Yes | 위도 |
+| userLocation.lng | `Decimal` | Yes | 경도 |
+
+### Response Body
+
 ```json
-{ "answer":"네, 약 120m 거리에 '궁동 도로 파손' 이슈가 있어요. 위험도 66으로 주의가 필요해요.",
-  "usedReportIds":[15] }
+{
+  "action": "SEARCH_NEARBY",
+  "params": {
+    "categoryCode": null,
+    "radiusMeters": 500,
+    "status": null
+  },
+  "answer": null
+}
 ```
+
+### Response Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| action | `String(enum)` | `ANSWER_DIRECT` / `SEARCH_NEARBY` / `MY_REPORTS` |
+| params | `Object` | BE 가 수행할 검색 파라미터(사용 안 하는 필드는 `null`) |
+| params.categoryCode | `String(enum)` | 유형 필터(공통 enum) 또는 `null` |
+| params.radiusMeters | `Integer` | SEARCH_NEARBY 검색 반경(기본 500) 또는 `null` |
+| params.status | `String` | MY_REPORTS 상태 필터 또는 `null` |
+| answer | `String` | `ANSWER_DIRECT` 일 때만 채워지는 응답 문구. 그 외 `null` |
+
+> BE 처리: `ANSWER_DIRECT` 면 `answer` 를 그대로 사용하고 종료. `SEARCH_NEARBY`/`MY_REPORTS` 면 `params` 로 자체 검색 후 Step 2(answer) 호출.
 
 ---
 
-# 엔드포인트 총괄
-| 기능 | 메서드 · 경로 | 형식 |
-|---|---|---|
-| ① 구조화 분석 | `POST /internal/v1/reports:analyze` | multipart |
-| ② 임베딩 | `POST /internal/v1/embeddings` | json |
-| ③ 챗봇 의도 | `POST /internal/v1/chatbot:plan` | json |
-| ③ 챗봇 응답 | `POST /internal/v1/chatbot:answer` | json |
-| 헬스체크 | `GET /health` | — |
+## ③ 챗봇 — Step 2 (answer)
+
+BE 가 검색한 `context.reports` 를 근거로 답변을 생성한다. 제공된 사실만 사용하며, 비면 솔직하게 "없음" 으로 답한다(환각 금지).
+
+### Example request
+
+`POST /internal/v1/chatbot:answer`
+
+### Headers
+
+| Header | Type | Required | Description |
+| --- | --- | --- | --- |
+| Content-Type | `String` | Yes | `application/json` |
+
+### Request Body
+
+```json
+{
+  "question": "이 근처 위험한 제보 있어?",
+  "history": [],
+  "context": {
+    "scope": "SEARCH_NEARBY",
+    "reports": [
+      {
+        "reportId": 15,
+        "title": "궁동 도로 파손",
+        "summary": "도로 파손으로 통행 위험",
+        "category": "도로 파손",
+        "address": "유성구 궁동",
+        "riskScore": 66.0,
+        "distanceMeters": 120.0,
+        "recentReportedAt": "2026-06-05T15:35:00"
+      }
+    ],
+    "userLocation": { "lat": 36.36, "lng": 127.34 }
+  }
+}
+```
+
+### Request Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| question | `String` | Yes | 사용자 질문 |
+| history | `Object[]` | No | 대화 이력(role/content) |
+| context | `Object` | Yes | BE 가 검색한 근거 |
+| context.scope | `String` | Yes | 검색 범위(예: `SEARCH_NEARBY`, `MY_REPORTS`) |
+| context.reports | `Object[]` | No | 근거 제보 목록(비어 있을 수 있음) |
+| context.reports[].reportId | `Integer` | Yes | 제보/이슈 ID |
+| context.reports[].title | `String` | Yes | 제목 |
+| context.reports[].summary | `String` | Yes | 요약 |
+| context.reports[].category | `String` | No | 카테고리명 |
+| context.reports[].address | `String` | No | 위치 |
+| context.reports[].riskScore | `Decimal` | No | 위험 점수 |
+| context.reports[].distanceMeters | `Decimal` | No | 사용자 위치로부터의 거리(m) |
+| context.reports[].recentReportedAt | `String` | No | 최근 제보 시각 |
+| context.userLocation | `Object` | No | 사용자 위치(lat/lng) |
+
+### Response Body
+
+```json
+{
+  "answer": "네, 약 120m 거리에 '궁동 도로 파손' 이슈가 있어요. 위험도 66으로 통행 시 주의가 필요해요.",
+  "usedReportIds": [15]
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| answer | `String` | 근거 기반 응답(한국어) |
+| usedReportIds | `Integer[]` | 답변에 실제 활용한 reportId 목록. 없으면 `[]` |
+
+---
+
+## 메타 — 헬스 체크
+
+### Example request
+
+`GET /health`
+
+### Response Body
+
+```json
+{
+  "status": "ok",
+  "app": "ssairen-ai",
+  "version": "0.1.0",
+  "environment": "local",
+  "models": {
+    "llm": "gpt-5.5",
+    "embedding": "BAAI/bge-m3",
+    "embedding_device": "cuda",
+    "embedding_dimension": 1024
+  }
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| status | `String` | `ok` |
+| app | `String` | 앱 이름 |
+| version | `String` | 앱 버전 |
+| environment | `String` | 실행 환경 |
+| models.llm | `String` | LLM 모델 ID |
+| models.embedding | `String` | 임베딩 모델명 |
+| models.embedding_device | `String` | 임베딩 디바이스(cuda/cpu) |
+| models.embedding_dimension | `Integer` | 임베딩 차원 |
+
+---
+
+## 메타 — 운영 메트릭
+
+### Example request
+
+`GET /metrics`
+
+### Response Body
+
+```json
+{
+  "llm_calls": 42,
+  "llm_errors": 1,
+  "prompt_tokens": 28840,
+  "completion_tokens": 5120,
+  "total_tokens": 33960,
+  "avg_latency_ms": 3608.7
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| llm_calls | `Integer` | 누적 LLM 호출 수 |
+| llm_errors | `Integer` | 누적 LLM 오류 수 |
+| prompt_tokens | `Integer` | 누적 프롬프트 토큰 |
+| completion_tokens | `Integer` | 누적 응답 토큰 |
+| total_tokens | `Integer` | 누적 총 토큰 |
+| avg_latency_ms | `Decimal` | 평균 LLM 지연(ms) |
+
+---
+
+## 공통 에러 응답
+
+모든 오류는 다음 형태로 반환한다.
+
+```json
+{
+  "error": {
+    "code": "llm_upstream_error",
+    "message": "OpenAI request failed: ...",
+    "requestId": "ae0c61bd80584ddd9ad233f6f643a173"
+  }
+}
+```
+
+### Error Codes
+
+| code | HTTP | 설명 |
+| --- | --- | --- |
+| validation_error | 422 | 요청 검증 실패(필드 누락/형식 오류, 이미지 개수·MIME 위반) |
+| llm_upstream_error | 502 | OpenAI 호출 실패(타임아웃/5xx/레이트리밋, 재시도 후) |
+| llm_refusal | 422 | LLM 이 구조화 응답을 거부 |
+| embedding_error | 500 | 임베딩 계산 실패 |
+| internal_error | 500 | 처리되지 않은 서버 오류 |
+
+> 이미지 용량 초과는 `413`(payload too large)로 응답한다.
