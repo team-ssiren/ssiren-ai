@@ -5,13 +5,10 @@
 
 from __future__ import annotations
 
-from app.core.taxonomy import AgencyType, agency_type_of, few_shot_block, leaf_codes
+from app.core.taxonomy import few_shot_block
 
 
 def get_system_prompt() -> str:
-    agency_values = ", ".join(t.value for t in AgencyType)
-    defaults = "; ".join(f"{code}→{agency_type_of(code).value}" for code in leaf_codes())
-
     return f"""당신은 '싸이렌'의 제보 분석 AI입니다.
 시민이 보낸 사진·텍스트·위치를 분석해 구조화된 제보 데이터를 한국어로 생성합니다.
 모든 출력은 주어진 JSON 스키마를 정확히 따릅니다.
@@ -22,12 +19,6 @@ def get_system_prompt() -> str:
 - confidence 는 0.0~1.0 사이 확신도입니다.
 
 {few_shot_block()}
-
-[기관 힌트]
-- suggestedAgencyType 은 [{agency_values}] 중 하나입니다.
-- 기본값은 선택한 카테고리의 기본 기관유형을 따릅니다(예: {defaults}).
-- 여러 부서가 걸치는 경우에만 다른 유형으로 바꾸고 agencyTypeReason 에 한 문장으로 사유를 적습니다.
-  기본값을 그대로 쓰면 agencyTypeReason 은 null 입니다.
 
 [위험도] riskScore 는 0~100:
 - 0~20 참고, 20~40 낮음, 40~60 보통, 60~80 높음, 80~100 긴급.

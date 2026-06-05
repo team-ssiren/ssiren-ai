@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.core.taxonomy import AgencyType, CategoryCode
+from app.core.taxonomy import CategoryCode
 
 
 class FiveW1H(BaseModel):
@@ -55,8 +55,6 @@ class AnalysisLLMOutput(BaseModel):
     contents: FiveW1H
     keywords: list[str]
     category: CategoryResult
-    suggestedAgencyType: AgencyType
-    agencyTypeReason: str | None
     riskScore: float  # 0 ~ 100
     analysis: Analysis
 

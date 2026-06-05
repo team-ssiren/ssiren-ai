@@ -59,8 +59,9 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | FIRE_EMERGENCY | 화재/응급 | 재난안전 | 소방 | 119안전센터 |
 | ETC_OTHER | 기타 | 기타 | 지자체 | 민원실 |
 
-**suggestedAgencyType**: `지자체` | `경찰` | `소방`
 **action** (챗봇 plan): `ANSWER_DIRECT` | `SEARCH_NEARBY` | `MY_REPORTS`
+
+> 기관유형·부서는 AI 가 반환하지 않는다. BE 가 위 표의 `categoryCode → 기본 기관유형/기본 부서` 매핑과 위치(관할)로 해소한다.
 
 ---
 
@@ -141,8 +142,6 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
     "categoryCode": "ROAD_DAMAGE",
     "confidence": 0.96
   },
-  "suggestedAgencyType": "지자체",
-  "agencyTypeReason": null,
   "riskScore": 72.0,
   "analysis": {
     "detectedObjects": ["파손된 맨홀 뚜껑", "보도블록", "균열", "구멍"],
@@ -177,8 +176,6 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | category | `Object` | 분류 결과 |
 | category.categoryCode | `String(enum)` | 리프 카테고리 코드(공통 enum 참조) |
 | category.confidence | `Decimal` | 분류 확신도(0.0~1.0) |
-| suggestedAgencyType | `String(enum)` | 추천 기관유형(지자체/경찰/소방). 기본은 카테고리 기본값 |
-| agencyTypeReason | `String` | 기본값을 덮어쓴 경우 사유. 기본값이면 `null` |
 | riskScore | `Decimal` | 위험 점수(0~100) |
 | analysis | `Object` | AI 분석 부가 결과 |
 | analysis.detectedObjects | `String[]` | 이미지에서 감지된 객체. 이미지 없으면 `[]` |

@@ -23,8 +23,6 @@ _FAKE = AnalyzeResponse.model_validate(
         },
         "keywords": ["도로 파손"],
         "category": {"categoryCode": "ROAD_DAMAGE", "confidence": 0.9},
-        "suggestedAgencyType": "지자체",
-        "agencyTypeReason": None,
         "riskScore": 62.5,
         "analysis": {
             "detectedObjects": ["도로"],

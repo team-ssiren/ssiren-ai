@@ -27,8 +27,6 @@ def _make_llm(risk=62.5, conf=0.9, fscore=8.0) -> AnalysisLLMOutput:
             },
             "keywords": ["도로 파손", "포트홀"],
             "category": {"categoryCode": "ROAD_DAMAGE", "confidence": conf},
-            "suggestedAgencyType": "지자체",
-            "agencyTypeReason": None,
             "riskScore": risk,
             "analysis": {
                 "detectedObjects": ["도로", "균열"],

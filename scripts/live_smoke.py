@@ -55,7 +55,6 @@ async def run_analyze():
         print(f"\n[{label}] 기대={expect_code}")
         print(f"  title       : {resp.title}")
         print(f"  category    : {ok_code} {code} (parent={parent_of(code).value}, conf={resp.category.confidence})")
-        print(f"  agencyType  : {resp.suggestedAgencyType.value}  reason={resp.agencyTypeReason}")
         print(f"  riskScore   : {resp.riskScore}")
         print(f"  falseReport : suspicious={resp.analysis.falseReport.isSuspicious} score={resp.analysis.falseReport.score}")
         print(f"  emergency   : {ok_emg} {resp.analysis.emergencyGuide.isEmergency}  msg={resp.analysis.emergencyGuide.message}")

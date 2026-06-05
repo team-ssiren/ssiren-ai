@@ -18,8 +18,6 @@ VALID_LLM = {
     },
     "keywords": ["인도 파손", "보행 위험", "낙상 위험"],
     "category": {"categoryCode": "ROAD_DAMAGE", "confidence": 0.92},
-    "suggestedAgencyType": "지자체",
-    "agencyTypeReason": None,
     "riskScore": 62.5,
     "analysis": {
         "detectedObjects": ["보도블록", "균열"],
@@ -32,7 +30,6 @@ VALID_LLM = {
 def test_valid_llm_output_parses():
     out = AnalysisLLMOutput.model_validate(VALID_LLM)
     assert out.category.categoryCode.value == "ROAD_DAMAGE"
-    assert out.suggestedAgencyType.value == "지자체"
     assert out.analysis.emergencyGuide.message is None
 
 
@@ -42,19 +39,12 @@ def test_invalid_category_code_rejected():
         AnalysisLLMOutput.model_validate(bad)
 
 
-def test_invalid_agency_type_rejected():
-    bad = {**VALID_LLM, "suggestedAgencyType": "국정원"}
-    with pytest.raises(ValidationError):
-        AnalysisLLMOutput.model_validate(bad)
-
-
 def test_response_adds_embedding():
     resp = AnalyzeResponse.model_validate({**VALID_LLM, "embedding": [0.1] * 1024})
     assert len(resp.embedding) == 1024
     # contract field names present (camelCase)
     dumped = resp.model_dump()
-    for key in ("title", "contents", "keywords", "category", "suggestedAgencyType",
-                "agencyTypeReason", "riskScore", "analysis", "embedding"):
+    for key in ("title", "contents", "keywords", "category", "riskScore", "analysis", "embedding"):
         assert key in dumped
 
 
