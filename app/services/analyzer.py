@@ -12,6 +12,7 @@ from datetime import datetime
 
 from starlette.concurrency import run_in_threadpool
 
+from app.core.concurrency import embedding_slot
 from app.core.structured import complete_structured
 from app.prompts.analyze import build_messages
 from app.schemas.report import AnalysisLLMOutput, AnalyzeResponse
@@ -74,7 +75,8 @@ async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
     text = embedder.build_embedding_text(
         title=llm.title, summary=llm.contents.summary, keywords=llm.keywords
     )
-    vectors = await run_in_threadpool(embedder.embed, [text])
+    async with embedding_slot():
+        vectors = await run_in_threadpool(embedder.embed, [text])
     embedding = vectors[0] if vectors else []
 
     data = llm.model_dump()

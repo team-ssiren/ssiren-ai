@@ -8,14 +8,20 @@ the SDK (configured on the client); remaining failures surface as ``LLMError``.
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from openai import OpenAIError
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.core import metrics
+from app.core.concurrency import llm_slot
 from app.core.errors import LLMError, LLMRefusalError
 from app.core.llm import get_openai_client
+
+logger = logging.getLogger("ssairen.llm")
 
 # OpenAI chat message list (role/content dicts, possibly with image parts).
 Messages = list[dict[str, Any]]
@@ -53,10 +59,35 @@ async def complete_structured[T: BaseModel](
     if max_tokens is not None:
         params["max_tokens"] = max_tokens
 
+    start = time.perf_counter()
     try:
-        completion = await client.chat.completions.parse(**params)
+        async with llm_slot():
+            completion = await client.chat.completions.parse(**params)
     except OpenAIError as exc:  # network, 5xx, rate limit, timeout (post-retry)
+        metrics.record_llm(
+            prompt_tokens=0,
+            completion_tokens=0,
+            latency_ms=(time.perf_counter() - start) * 1000,
+            error=True,
+        )
         raise LLMError(f"OpenAI request failed: {exc}") from exc
+
+    latency_ms = (time.perf_counter() - start) * 1000
+    usage = getattr(completion, "usage", None)
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    metrics.record_llm(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        latency_ms=latency_ms,
+    )
+    logger.info(
+        "llm_call model=%s latency_ms=%.0f prompt_tokens=%s completion_tokens=%s",
+        params["model"],
+        latency_ms,
+        prompt_tokens,
+        completion_tokens,
+    )
 
     message = completion.choices[0].message
 

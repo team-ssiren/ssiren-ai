@@ -13,6 +13,8 @@ from app.api.errors import register_exception_handlers
 from app.api.middleware import register_middleware
 from app.api.routes import chatbot, embeddings, reports
 from app.config import Settings, get_settings
+from app.core import metrics
+from app.core.concurrency import init_semaphores
 
 logger = logging.getLogger("ssairen.startup")
 
@@ -27,6 +29,12 @@ def _configure_logging() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    init_semaphores(settings.llm_max_concurrency, settings.embedding_max_concurrency)
+    logger.info(
+        "concurrency limits: llm=%d embedding=%d",
+        settings.llm_max_concurrency,
+        settings.embedding_max_concurrency,
+    )
     if settings.embedding_warmup:
         from app.services.embedder import warmup
 
@@ -69,6 +77,10 @@ def create_app() -> FastAPI:
                 "embedding_dimension": s.embedding_dimension,
             },
         }
+
+    @app.get("/metrics", tags=["meta"])
+    def metrics_endpoint() -> dict:
+        return metrics.snapshot()
 
     return app
 

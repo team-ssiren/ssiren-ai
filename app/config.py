@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     )
     llm_timeout_seconds: float = Field(default=60.0)
     llm_max_retries: int = Field(default=1)
+    llm_max_concurrency: int = Field(default=8, description="Max concurrent LLM calls")
 
     # --- Embeddings (bge-m3 via sentence-transformers) ---
     embedding_model: str = Field(default="BAAI/bge-m3")
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     embedding_dimension: int = Field(default=1024)
     embedding_warmup: bool = Field(default=True, description="Load model at startup")
     embedding_max_batch: int = Field(default=128, description="Max texts per request")
+    embedding_max_concurrency: int = Field(default=2, description="Max concurrent GPU encodes")
 
     # --- Analyze (① multimodal) guards ---
     analyze_max_images: int = Field(default=5)

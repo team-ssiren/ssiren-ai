@@ -35,6 +35,20 @@ uv run uvicorn app.main:app --reload --port 8000
 curl http://localhost:8000/health
 ```
 
+## 운영
+
+- **헬스/메트릭**: `GET /health`(모델·버전), `GET /metrics`(LLM 호출수·토큰·평균지연·오류).
+- **동시성 제한**: `LLM_MAX_CONCURRENCY`(기본 8), `EMBEDDING_MAX_CONCURRENCY`(기본 2, 단일 GPU 경합 방지). 기동 시 세마포어 초기화.
+- **타임아웃/재시도**: `LLM_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`(OpenAI SDK 내장 재시도).
+- **에러 규약**: 모든 오류는 `{"error":{"code","message","requestId"}}` 형태. LLM 장애는 502(`llm_upstream_error`)로 무중단 응답.
+- **⚠️ GPT-5 계열 주의**: `gpt-5.5` 는 기본 temperature(1)만 지원하므로 `LLM_SEND_TEMPERATURE=false`(기본) 로 둔다. 결정성은 Structured Outputs 가 담당.
+
+## 라이브 스모크 (실 OpenAI 호출, 비용 발생)
+
+```bash
+uv run python scripts/live_smoke.py   # ① 분석 골든셋 + ③ 챗봇 검증
+```
+
 ## 프로젝트 구조
 
 ```

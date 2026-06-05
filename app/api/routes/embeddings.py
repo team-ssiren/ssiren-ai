@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from app.config import get_settings
+from app.core.concurrency import embedding_slot
 from app.schemas.embedding import EmbeddingRequest, EmbeddingResponse
 from app.services import embedder
 
@@ -25,8 +26,9 @@ async def create_embeddings(req: EmbeddingRequest) -> EmbeddingResponse:
             detail=f"too many texts: {len(req.texts)} > {settings.embedding_max_batch}",
         )
 
-    # GPU/CPU-bound work runs in a threadpool to avoid blocking the event loop.
-    vectors = await run_in_threadpool(embedder.embed, req.texts)
+    # GPU/CPU-bound work runs in a threadpool, bounded by the embedding semaphore.
+    async with embedding_slot():
+        vectors = await run_in_threadpool(embedder.embed, req.texts)
 
     return EmbeddingResponse(
         model="bge-m3",
