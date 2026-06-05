@@ -30,17 +30,10 @@ params.categoryCode 는 다음 중 하나이거나 null: {", ".join(leaf_codes()
 answer 에 즉시 112(범죄)/119(화재·응급) 신고를 우선 안내하세요."""
 
 
-def build_plan_messages(
-    question: str, history: list[ChatMessage], has_location: bool, limit: int
-) -> list[dict]:
-    loc = (
-        "사용자 위치 정보가 제공됨."
-        if has_location
-        else "사용자 위치 정보 없음(SEARCH_NEARBY 시 BE가 처리)."
-    )
+def build_plan_messages(question: str, history: list[ChatMessage], limit: int) -> list[dict]:
     messages: list[dict] = [{"role": "system", "content": PLAN_SYSTEM}]
     messages += _history_to_messages(history, limit)
-    messages.append({"role": "user", "content": f"[{loc}]\n{question}"})
+    messages.append({"role": "user", "content": question})
     return messages
 
 

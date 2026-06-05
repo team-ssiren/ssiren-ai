@@ -270,10 +270,12 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
   "history": [
     { "role": "user", "content": "안녕" },
     { "role": "assistant", "content": "안녕하세요! 무엇을 도와드릴까요?" }
-  ],
-  "userLocation": { "lat": 36.36, "lng": 127.34 }
+  ]
 }
 ```
+
+> plan 은 순수 의도 분류만 한다. 사용자 위치(좌표)는 plan 에 보내지 않으며, BE 가
+> `SEARCH_NEARBY` 결과를 받아 자체 좌표로 검색한다.
 
 ### Request Fields
 
@@ -283,9 +285,6 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | history | `Object[]` | No | 대화 이력. BE 가 최근 N턴만 전달 |
 | history[].role | `String` | Yes | `user` 또는 `assistant` |
 | history[].content | `String` | Yes | 메시지 내용 |
-| userLocation | `Object` | No | 사용자 위치 |
-| userLocation.lat | `Decimal` | Yes | 위도 |
-| userLocation.lng | `Decimal` | Yes | 경도 |
 
 ### Response Body
 

@@ -39,7 +39,6 @@ class PlanParams(BaseModel):
 class ChatPlanRequest(BaseModel):
     question: str
     history: list[ChatMessage] = Field(default_factory=list)
-    userLocation: UserLocation | None = None
 
 
 class ChatPlanResult(BaseModel):

@@ -17,7 +17,6 @@ from app.schemas.chatbot import (
     ChatContext,
     ChatPlanRequest,
     ContextReport,
-    UserLocation,
 )
 from app.services import chatbot
 from app.services.analyzer import AnalyzeInput, analyze
@@ -68,12 +67,12 @@ async def run_chatbot():
     print("=" * 70)
 
     plan_cases = [
-        ("잡담→ANSWER_DIRECT", "안전신문고랑 싸이렌은 뭐가 달라?", None),
-        ("근처→SEARCH_NEARBY", "이 근처에 위험한 제보 있어?", UserLocation(lat=36.36, lng=127.34)),
-        ("내제보→MY_REPORTS", "내가 신고한 거 처리됐어?", None),
+        ("잡담→ANSWER_DIRECT", "안전신문고랑 싸이렌은 뭐가 달라?"),
+        ("근처→SEARCH_NEARBY", "이 근처에 위험한 제보 있어?"),
+        ("내제보→MY_REPORTS", "내가 신고한 거 처리됐어?"),
     ]
-    for label, q, loc in plan_cases:
-        out = await chatbot.plan(ChatPlanRequest(question=q, userLocation=loc))
+    for label, q in plan_cases:
+        out = await chatbot.plan(ChatPlanRequest(question=q))
         print(f"\n[{label}] Q={q}")
         print(f"  action={out.action.value} params={out.params.model_dump()} answer={out.answer!r}")
 

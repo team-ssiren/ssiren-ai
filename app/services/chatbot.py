@@ -22,7 +22,6 @@ async def plan(req: ChatPlanRequest) -> ChatPlanResult:
     messages = build_plan_messages(
         question=req.question,
         history=req.history,
-        has_location=req.userLocation is not None,
         limit=settings.chatbot_history_max_turns,
     )
     # Temperature is governed globally (llm_temperature / llm_send_temperature);

@@ -40,14 +40,9 @@ async def test_plan_search_nearby(monkeypatch):
         return result
 
     monkeypatch.setattr(chatbot, "complete_structured", fake_cs)
-    from app.schemas.chatbot import ChatPlanRequest, UserLocation
+    from app.schemas.chatbot import ChatPlanRequest
 
-    out = await chatbot.plan(
-        ChatPlanRequest(
-            question="이 근처 위험한 거 있어?",
-            userLocation=UserLocation(lat=36.3, lng=127.3),
-        )
-    )
+    out = await chatbot.plan(ChatPlanRequest(question="이 근처 위험한 거 있어?"))
     assert out.action.value == "SEARCH_NEARBY"
     assert out.params.radiusMeters == 500
 
@@ -88,7 +83,7 @@ async def test_answer_grounded(monkeypatch):
 # --- prompt: history window ---------------------------------------------------
 def test_plan_history_window_limits():
     history = [ChatMessage(role="user", content=f"m{i}") for i in range(30)]
-    msgs = build_plan_messages(question="q", history=history, has_location=False, limit=10)
+    msgs = build_plan_messages(question="q", history=history, limit=10)
     # 1 system + 10 history + 1 current user
     assert len(msgs) == 12
     assert msgs[0]["role"] == "system"
