@@ -4,7 +4,7 @@
 
 - 호출 방향: **BE → AI 단방향** (AI는 BE를 역호출하지 않음)
 - 상태 없음: DB·세션 저장 없음. 대화/지식 맥락은 매 요청에 BE가 실어 보냄.
-- 계약 문서: [`API/API 명세서(AI-BE).md`](API/API%20명세서(AI-BE).md) · 로드맵: [`PLAN.md`](PLAN.md)
+- 계약 문서: [`docs/dev/API/API 명세서(AI-BE).md`](docs/dev/API/API%20명세서(AI-BE).md) · 로드맵: [`docs/dev/PLAN.md`](docs/dev/PLAN.md)
 
 ## 기능
 
