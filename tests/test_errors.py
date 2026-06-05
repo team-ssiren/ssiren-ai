@@ -4,7 +4,7 @@ import os
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.api.errors import register_exception_handlers  # noqa: E402
@@ -24,6 +24,14 @@ def _app() -> FastAPI:
     @app.get("/unexpected")
     def unexpected():
         raise RuntimeError("kaboom")
+
+    @app.get("/toolarge")
+    def toolarge():
+        raise HTTPException(status_code=413, detail="image too large")
+
+    @app.get("/guard422")
+    def guard422():
+        raise HTTPException(status_code=422, detail="too many images")
 
     return app
 
@@ -53,3 +61,18 @@ def test_request_id_is_echoed():
     resp = client.get("/boom", headers={REQUEST_ID_HEADER: "fixed-rid-123"})
     assert resp.headers[REQUEST_ID_HEADER] == "fixed-rid-123"
     assert resp.json()["error"]["requestId"] == "fixed-rid-123"
+
+
+def test_http_exception_uses_standard_envelope():
+    resp = client.get("/toolarge")
+    assert resp.status_code == 413
+    body = resp.json()
+    assert "detail" not in body  # not FastAPI's default shape
+    assert body["error"]["code"] == "payload_too_large"
+    assert body["error"]["message"] == "image too large"
+    assert body["error"]["requestId"]
+
+
+def test_guard_422_maps_to_validation_error():
+    body = client.get("/guard422").json()
+    assert body["error"]["code"] == "validation_error"

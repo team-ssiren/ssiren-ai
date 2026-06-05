@@ -13,11 +13,22 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.middleware import get_request_id
 from app.core.errors import AppError
 
 logger = logging.getLogger("ssairen.api")
+
+# Map HTTP status -> stable machine-readable code for the error envelope.
+_HTTP_ERROR_CODES = {
+    400: "bad_request",
+    404: "not_found",
+    405: "method_not_allowed",
+    413: "payload_too_large",
+    415: "unsupported_media_type",
+    422: "validation_error",
+}
 
 
 class ErrorDetail(BaseModel):
@@ -50,6 +61,15 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=422,
             content=_payload("validation_error", str(exc.errors()), request),
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_exception(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        # Route-level guards raise HTTPException; normalize to the standard envelope.
+        code = _HTTP_ERROR_CODES.get(exc.status_code, "http_error")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=_payload(code, str(exc.detail), request),
         )
 
     @app.exception_handler(Exception)

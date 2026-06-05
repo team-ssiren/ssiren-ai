@@ -481,10 +481,11 @@ BE 가 검색한 `context.reports` 를 근거로 답변을 생성한다. 제공�
 
 | code | HTTP | 설명 |
 | --- | --- | --- |
-| validation_error | 422 | 요청 검증 실패(필드 누락/형식 오류, 이미지 개수·MIME 위반) |
+| validation_error | 422 | 요청 검증 실패(필드 누락/형식 오류, 이미지 개수·MIME 위반, 임베딩 배치 초과) |
+| payload_too_large | 413 | 이미지 용량 초과(장당 최대 10MB) |
 | llm_upstream_error | 502 | OpenAI 호출 실패(타임아웃/5xx/레이트리밋, 재시도 후) |
 | llm_refusal | 422 | LLM 이 구조화 응답을 거부 |
 | embedding_error | 500 | 임베딩 계산 실패 |
 | internal_error | 500 | 처리되지 않은 서버 오류 |
 
-> 이미지 용량 초과는 `413`(payload too large)로 응답한다.
+> 라우트 가드 오류(이미지 개수·용량·MIME, 배치 초과 등)도 위 표준 봉투로 통일되어 반환된다.

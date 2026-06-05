@@ -29,3 +29,6 @@ def test_oversize_batch_rejected(monkeypatch):
     monkeypatch.setattr(route.embedder, "embed", lambda texts: [[0.0] * 1024 for _ in texts])
     resp = client.post("/internal/v1/embeddings", json={"texts": ["x"] * 200})
     assert resp.status_code == 422
+    body = resp.json()
+    assert "detail" not in body
+    assert body["error"]["code"] == "validation_error"

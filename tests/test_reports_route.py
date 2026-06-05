@@ -76,6 +76,10 @@ def test_non_image_file_rejected():
         files=[("images", ("note.txt", b"hello", "text/plain"))],
     )
     assert resp.status_code == 422
+    # guard error must use the standard envelope, not FastAPI's {"detail": ...}
+    body = resp.json()
+    assert "detail" not in body
+    assert body["error"]["code"] == "validation_error"
 
 
 def test_too_many_images_rejected():
