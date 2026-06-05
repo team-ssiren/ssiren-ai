@@ -27,7 +27,11 @@ class Settings(BaseSettings):
     # --- OpenAI (LLM) ---
     openai_api_key: str = Field(..., description="OpenAI API key (required)")
     openai_model: str = Field(default="gpt-5.5", description="Chat/vision model id")
-    llm_temperature: float = Field(default=0.0, description="Deterministic by default")
+    llm_temperature: float = Field(default=0.0, description="Used only if llm_send_temperature")
+    llm_send_temperature: bool = Field(
+        default=False,
+        description="GPT-5 family rejects non-default temperature; keep off for those models",
+    )
     llm_timeout_seconds: float = Field(default=60.0)
     llm_max_retries: int = Field(default=1)
 

@@ -38,14 +38,23 @@ async def complete_structured[T: BaseModel](
     settings = get_settings()
     client = get_openai_client()
 
+    # Build params conditionally — omit optionals entirely when unset, since some
+    # models reject explicit nulls (e.g. max_tokens) or non-default temperature.
+    params: dict[str, Any] = {
+        "model": model or settings.openai_model,
+        "messages": messages,
+        "response_format": schema,
+    }
+    # Some models (GPT-5 family) only accept the default temperature; gate sending it.
+    if settings.llm_send_temperature:
+        temp = settings.llm_temperature if temperature is None else temperature
+        if temp is not None:
+            params["temperature"] = temp
+    if max_tokens is not None:
+        params["max_tokens"] = max_tokens
+
     try:
-        completion = await client.chat.completions.parse(
-            model=model or settings.openai_model,
-            messages=messages,
-            response_format=schema,
-            temperature=settings.llm_temperature if temperature is None else temperature,
-            max_tokens=max_tokens,
-        )
+        completion = await client.chat.completions.parse(**params)
     except OpenAIError as exc:  # network, 5xx, rate limit, timeout (post-retry)
         raise LLMError(f"OpenAI request failed: {exc}") from exc
 
