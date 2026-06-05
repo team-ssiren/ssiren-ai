@@ -1,15 +1,27 @@
 """FastAPI application entrypoint.
 
-Phase 0-1: app factory, settings wiring, and the /health endpoint.
-Routes and middleware for the AI features are added in later phases.
+App factory wiring settings, request-context middleware, standard error handlers,
+and the /health endpoint. Feature routes are mounted in later phases.
 """
+
+import logging
 
 from fastapi import FastAPI
 
+from app.api.errors import register_exception_handlers
+from app.api.middleware import register_middleware
 from app.config import Settings, get_settings
 
 
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s | %(message)s",
+    )
+
+
 def create_app() -> FastAPI:
+    _configure_logging()
     settings = get_settings()
 
     app = FastAPI(
@@ -18,6 +30,9 @@ def create_app() -> FastAPI:
         description="싸이렌 AI 서버 (internal, BE→AI). Not exposed publicly.",
         docs_url="/docs",
     )
+
+    register_middleware(app)
+    register_exception_handlers(app)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict:
