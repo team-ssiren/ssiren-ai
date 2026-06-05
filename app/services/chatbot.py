@@ -25,11 +25,9 @@ async def plan(req: ChatPlanRequest) -> ChatPlanResult:
         has_location=req.userLocation is not None,
         limit=settings.chatbot_history_max_turns,
     )
-    return await complete_structured(
-        messages=messages,
-        schema=ChatPlanResult,
-        temperature=0.0,  # deterministic routing
-    )
+    # Temperature is governed globally (llm_temperature / llm_send_temperature);
+    # determinism here comes from Structured Outputs (enum-constrained action).
+    return await complete_structured(messages=messages, schema=ChatPlanResult)
 
 
 async def answer(req: ChatAnswerRequest) -> ChatAnswerResult:
@@ -40,8 +38,4 @@ async def answer(req: ChatAnswerRequest) -> ChatAnswerResult:
         context=req.context,
         limit=settings.chatbot_history_max_turns,
     )
-    return await complete_structured(
-        messages=messages,
-        schema=ChatAnswerResult,
-        temperature=settings.chatbot_answer_temperature,
-    )
+    return await complete_structured(messages=messages, schema=ChatAnswerResult)

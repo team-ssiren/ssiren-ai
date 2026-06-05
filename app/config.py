@@ -49,7 +49,6 @@ class Settings(BaseSettings):
     analyze_max_image_mb: int = Field(default=10)
 
     # --- Domain thresholds (defaults; BE owns final policy) ---
-    chatbot_answer_temperature: float = Field(default=0.3)
     chatbot_history_max_turns: int = Field(default=10)
 
 
