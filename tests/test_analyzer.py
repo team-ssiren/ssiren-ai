@@ -103,6 +103,29 @@ async def test_embedding_text_uses_title_summary_keywords(monkeypatch):
     assert "포트홀" in text  # keyword
 
 
+@pytest.mark.anyio
+async def test_occurred_at_echoed_or_defaulted(monkeypatch):
+    async def fake_cs(**kw):
+        return _make_llm()
+
+    monkeypatch.setattr(analyzer, "complete_structured", fake_cs)
+    monkeypatch.setattr(analyzer.embedder, "embed", lambda texts: [[0.0] * 1024])
+
+    # provided -> echoed verbatim
+    provided = await analyzer.analyze(
+        analyzer.AnalyzeInput(
+            content="x", latitude=0.0, longitude=0.0, occurred_at="2026-06-05T15:30:00"
+        )
+    )
+    assert provided.occurredAt == "2026-06-05T15:30:00"
+
+    # missing -> server default (non-empty), still returned so BE can reuse it
+    defaulted = await analyzer.analyze(
+        analyzer.AnalyzeInput(content="x", latitude=0.0, longitude=0.0)
+    )
+    assert defaulted.occurredAt
+
+
 def test_build_messages_without_images():
     msgs = build_messages(
         content="쓰레기가 쌓여있어요",

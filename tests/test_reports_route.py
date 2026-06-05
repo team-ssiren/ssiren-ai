@@ -29,6 +29,7 @@ _FAKE = AnalyzeResponse.model_validate(
             "falseReport": {"isSuspicious": False, "score": 8.0, "reason": "ok"},
             "emergencyGuide": {"isEmergency": False, "message": None},
         },
+        "occurredAt": "2026-06-05T15:30:00",
         "embedding": [0.1] * 1024,
     }
 )

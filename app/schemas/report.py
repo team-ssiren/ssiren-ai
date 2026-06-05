@@ -60,6 +60,9 @@ class AnalysisLLMOutput(BaseModel):
 
 
 class AnalyzeResponse(AnalysisLLMOutput):
-    """API 응답 = LLM 출력 + 서버가 합성한 임베딩."""
+    """API 응답 = LLM 출력 + 서버가 합성한 필드."""
 
+    # 서버가 해소한 발생 시각(요청값 또는 서버 기본값). contents.when 과 동일 출처라
+    # BE 는 이 값을 reportDraft.occurredAt 으로 그대로 사용하면 일관된다.
+    occurredAt: str
     embedding: list[float]

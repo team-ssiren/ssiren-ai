@@ -39,12 +39,16 @@ def test_invalid_category_code_rejected():
         AnalysisLLMOutput.model_validate(bad)
 
 
-def test_response_adds_embedding():
-    resp = AnalyzeResponse.model_validate({**VALID_LLM, "embedding": [0.1] * 1024})
+def test_response_adds_embedding_and_occurred_at():
+    resp = AnalyzeResponse.model_validate(
+        {**VALID_LLM, "occurredAt": "2026-05-28T07:40:00", "embedding": [0.1] * 1024}
+    )
     assert len(resp.embedding) == 1024
+    assert resp.occurredAt == "2026-05-28T07:40:00"
     # contract field names present (camelCase)
     dumped = resp.model_dump()
-    for key in ("title", "contents", "keywords", "category", "riskScore", "analysis", "embedding"):
+    for key in ("title", "contents", "keywords", "category", "riskScore",
+                "analysis", "occurredAt", "embedding"):
         assert key in dumped
 
 

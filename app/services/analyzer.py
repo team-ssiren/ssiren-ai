@@ -80,5 +80,6 @@ async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
     embedding = vectors[0] if vectors else []
 
     data = llm.model_dump()
+    data["occurredAt"] = occurred_at  # echo the resolved value (single source vs contents.when)
     data["embedding"] = embedding
     return AnalyzeResponse.model_validate(data)

@@ -155,6 +155,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
       "message": null
     }
   },
+  "occurredAt": "2026-06-05T15:30:00",
   "embedding": [0.013, -0.024, "...(총 1024개)"]
 }
 ```
@@ -186,6 +187,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | analysis.emergencyGuide | `Object` | 긴급 신고 안내 |
 | analysis.emergencyGuide.isEmergency | `Boolean` | 긴급 상황 여부 |
 | analysis.emergencyGuide.message | `String` | 긴급 시 112/119 안내 문구. 아니면 `null` |
+| occurredAt | `String` | 서버가 해소한 발생 시각(요청값 또는 서버 기본값). `contents.when` 과 동일 출처이므로 BE 는 이 값을 `reportDraft.occurredAt` 으로 그대로 사용 |
 | embedding | `Decimal[]` | bge-m3 임베딩 벡터(1024차원, L2 정규화). BE 가 중복판단·저장에 사용 |
 
 > BE 처리: `categoryCode` 로 `categoryId`·`parentCategory`·`departmentName`·실기관을 매핑하고, 주소(`roadAddress` 등)는 자체 역지오코딩 값을 사용한다. `embedding` 은 별도 임베딩 호출 없이 중복판단/저장에 바로 활용한다.
