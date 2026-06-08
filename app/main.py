@@ -35,12 +35,6 @@ async def lifespan(app: FastAPI):
         settings.llm_max_concurrency,
         settings.embedding_max_concurrency,
     )
-    if settings.embedding_warmup:
-        from app.services.embedder import warmup
-
-        logger.info("warming up embedding model: %s", settings.embedding_model)
-        warmup()
-        logger.info("embedding model ready")
     yield
 
 
@@ -73,7 +67,6 @@ def create_app() -> FastAPI:
             "models": {
                 "llm": s.openai_model,
                 "embedding": s.embedding_model,
-                "embedding_device": s.embedding_device,
                 "embedding_dimension": s.embedding_dimension,
             },
         }

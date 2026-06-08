@@ -18,5 +18,5 @@ def test_health_ok():
     assert body["status"] == "ok"
     assert body["app"] == "ssairen-ai"
     assert "version" in body
-    assert body["models"]["embedding"] == "BAAI/bge-m3"
-    assert body["models"]["embedding_dimension"] == 1024
+    assert body["models"]["embedding"] == "text-embedding-3-small"
+    assert body["models"]["embedding_dimension"] == 1536

@@ -12,6 +12,10 @@ def anyio_backend():
     return "asyncio"
 
 
+async def _stub_embed(texts):
+    return [[0.1] * 1536 for _ in texts]
+
+
 def _make_llm(risk=62.5, conf=0.9, fscore=8.0) -> AnalysisLLMOutput:
     return AnalysisLLMOutput.model_validate(
         {
@@ -47,7 +51,7 @@ async def test_analyze_assembles_response_with_embedding(monkeypatch):
         return _make_llm()
 
     monkeypatch.setattr(analyzer, "complete_structured", fake_cs)
-    monkeypatch.setattr(analyzer.embedder, "embed", lambda texts: [[0.2] * 1024])
+    monkeypatch.setattr(analyzer.embedder, "embed", _stub_embed)
 
     resp = await analyzer.analyze(
         analyzer.AnalyzeInput(
@@ -59,7 +63,7 @@ async def test_analyze_assembles_response_with_embedding(monkeypatch):
     )
 
     assert resp.category.categoryCode.value == "ROAD_DAMAGE"
-    assert len(resp.embedding) == 1024
+    assert len(resp.embedding) == 1536
     assert captured["schema"] is AnalysisLLMOutput
     # multimodal: image part injected into user message
     user_parts = captured["messages"][1]["content"]
@@ -72,7 +76,7 @@ async def test_scores_are_clamped(monkeypatch):
         return _make_llm(risk=150.0, conf=1.5, fscore=120.0)
 
     monkeypatch.setattr(analyzer, "complete_structured", fake_cs)
-    monkeypatch.setattr(analyzer.embedder, "embed", lambda texts: [[0.0] * 1024])
+    monkeypatch.setattr(analyzer.embedder, "embed", _stub_embed)
 
     resp = await analyzer.analyze(
         analyzer.AnalyzeInput(content="x", latitude=0.0, longitude=0.0)
@@ -89,9 +93,9 @@ async def test_embedding_text_uses_title_summary_keywords(monkeypatch):
     async def fake_cs(**kw):
         return _make_llm()
 
-    def fake_embed(texts):
+    async def fake_embed(texts):
         seen["text"] = texts[0]
-        return [[0.1] * 1024]
+        return [[0.1] * 1536]
 
     monkeypatch.setattr(analyzer, "complete_structured", fake_cs)
     monkeypatch.setattr(analyzer.embedder, "embed", fake_embed)
@@ -109,7 +113,7 @@ async def test_occurred_at_echoed_or_defaulted(monkeypatch):
         return _make_llm()
 
     monkeypatch.setattr(analyzer, "complete_structured", fake_cs)
-    monkeypatch.setattr(analyzer.embedder, "embed", lambda texts: [[0.0] * 1024])
+    monkeypatch.setattr(analyzer.embedder, "embed", _stub_embed)
 
     # provided -> echoed verbatim
     provided = await analyzer.analyze(

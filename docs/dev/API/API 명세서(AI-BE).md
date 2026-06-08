@@ -11,7 +11,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | 인증 | **없음** (BE 가 사용자 인증을 이미 처리, AI 는 신뢰된 내부 호출만 수신) |
 | 상태 | **Stateless** — DB·세션 저장 없음. 대화/지식 맥락은 매 요청에 BE 가 전달 |
 | LLM | OpenAI (모델명 env, 기본 `gpt-5.5`). Structured Outputs(enum 강제)로 결정성 확보 |
-| 임베딩 | `BAAI/bge-m3` (1024차원, L2 정규화). AI 는 벡터만 생성, 코사인/저장/임계값은 BE |
+| 임베딩 | OpenAI `text-embedding-3-small` (1536차원, unit-norm). AI 는 벡터만 생성, 코사인/저장/임계값은 BE |
 | Base URL | `http://{ai-host}:{port}` (예: `http://localhost:8000`) |
 
 ### BE ↔ AI 책임 분담
@@ -156,7 +156,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
     }
   },
   "occurredAt": "2026-06-05T15:30:00",
-  "embedding": [0.013, -0.024, "...(총 1024개)"]
+  "embedding": [0.013, -0.024, "...(총 1536개)"]
 }
 ```
 
@@ -188,7 +188,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | analysis.emergencyGuide.isEmergency | `Boolean` | 긴급 상황 여부 |
 | analysis.emergencyGuide.message | `String` | 긴급 시 112/119 안내 문구. 아니면 `null` |
 | occurredAt | `String` | 서버가 해소한 발생 시각(요청값 또는 서버 기본값). `contents.when` 과 동일 출처이므로 BE 는 이 값을 `reportDraft.occurredAt` 으로 그대로 사용 |
-| embedding | `Decimal[]` | bge-m3 임베딩 벡터(1024차원, L2 정규화). BE 가 중복판단·저장에 사용 |
+| embedding | `Decimal[]` | text-embedding-3-small 임베딩 벡터(1536차원, unit-norm). BE 가 중복판단·저장에 사용 |
 
 > BE 처리: `categoryCode` 로 `categoryId`·`parentCategory`·`departmentName`·실기관을 매핑하고, 주소(`roadAddress` 등)는 자체 역지오코딩 값을 사용한다. `embedding` 은 별도 임베딩 호출 없이 중복판단/저장에 바로 활용한다.
 
@@ -196,7 +196,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 
 ## ② 텍스트 임베딩
 
-`title + summary + keywords` 결합 규칙으로 만든 텍스트를 bge-m3 벡터로 변환한다. ① 분석 응답에 이미 임베딩이 포함되므로, 이 엔드포인트는 **기존 제보 백필·재계산용**이다.
+`title + summary + keywords` 결합 규칙으로 만든 텍스트를 text-embedding-3-small 벡터로 변환한다. ① 분석 응답에 이미 임베딩이 포함되므로, 이 엔드포인트는 **기존 제보 백필·재계산용**이다.
 
 ### Example request
 
@@ -229,11 +229,11 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 
 ```json
 {
-  "model": "bge-m3",
-  "dimension": 1024,
+  "model": "text-embedding-3-small",
+  "dimension": 1536,
   "embeddings": [
-    [0.011, -0.022, "...(1024)"],
-    [0.034, 0.005, "...(1024)"]
+    [0.011, -0.022, "...(1536)"],
+    [0.034, 0.005, "...(1536)"]
   ]
 }
 ```
@@ -242,8 +242,8 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 
 | Field | Type | Description |
 | --- | --- | --- |
-| model | `String` | 임베딩 모델명(`bge-m3`) |
-| dimension | `Integer` | 벡터 차원(1024) |
+| model | `String` | 임베딩 모델명(`text-embedding-3-small`) |
+| dimension | `Integer` | 벡터 차원(1536) |
 | embeddings | `Decimal[][]` | 입력 순서대로의 L2 정규화 임베딩 벡터 목록 |
 
 ---
@@ -405,9 +405,8 @@ BE 가 검색한 `context.reports` 를 근거로 답변을 생성한다. 제공�
   "environment": "local",
   "models": {
     "llm": "gpt-5.5",
-    "embedding": "BAAI/bge-m3",
-    "embedding_device": "cuda",
-    "embedding_dimension": 1024
+    "embedding": "text-embedding-3-small",
+    "embedding_dimension": 1536
   }
 }
 ```
@@ -422,7 +421,6 @@ BE 가 검색한 `context.reports` 를 근거로 답변을 생성한다. 제공�
 | environment | `String` | 실행 환경 |
 | models.llm | `String` | LLM 모델 ID |
 | models.embedding | `String` | 임베딩 모델명 |
-| models.embedding_device | `String` | 임베딩 디바이스(cuda/cpu) |
 | models.embedding_dimension | `Integer` | 임베딩 차원 |
 
 ---

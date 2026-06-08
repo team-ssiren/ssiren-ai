@@ -10,6 +10,6 @@ class EmbeddingRequest(BaseModel):
 
 
 class EmbeddingResponse(BaseModel):
-    model: str = Field(default="bge-m3")
+    model: str
     dimension: int
     embeddings: list[list[float]]

@@ -1,7 +1,7 @@
 """① 구조화 분석 파이프라인.
 
 멀티모달(이미지+텍스트+주소) → OpenAI Structured Output → 구조화 JSON.
-점수는 후처리로 범위 클램프하고, 임베딩(bge-m3)을 합성해 AnalyzeResponse 로 반환한다.
+점수는 후처리로 범위 클램프하고, 임베딩을 합성해 AnalyzeResponse 로 반환한다.
 """
 
 from __future__ import annotations
@@ -9,8 +9,6 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass, field
 from datetime import datetime
-
-from starlette.concurrency import run_in_threadpool
 
 from app.core.concurrency import embedding_slot
 from app.core.structured import complete_structured
@@ -76,7 +74,7 @@ async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
         title=llm.title, summary=llm.contents.summary, keywords=llm.keywords
     )
     async with embedding_slot():
-        vectors = await run_in_threadpool(embedder.embed, [text])
+        vectors = await embedder.embed([text])
     embedding = vectors[0] if vectors else []
 
     data = llm.model_dump()
