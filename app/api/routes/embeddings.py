@@ -1,12 +1,11 @@
 """② 임베딩 엔드포인트 — POST /internal/v1/embeddings.
 
-bge-m3 벡터 생성만 담당(백필/재계산용). 코사인 유사도·저장·임계값은 BE.
+OpenAI 임베딩 벡터 생성만 담당(백필/재계산용). 코사인 유사도·저장·임계값은 BE.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
-from starlette.concurrency import run_in_threadpool
 
 from app.config import get_settings
 from app.core.concurrency import embedding_slot
@@ -26,12 +25,11 @@ async def create_embeddings(req: EmbeddingRequest) -> EmbeddingResponse:
             detail=f"too many texts: {len(req.texts)} > {settings.embedding_max_batch}",
         )
 
-    # GPU/CPU-bound work runs in a threadpool, bounded by the embedding semaphore.
     async with embedding_slot():
-        vectors = await run_in_threadpool(embedder.embed, req.texts)
+        vectors = await embedder.embed(req.texts)
 
     return EmbeddingResponse(
-        model="bge-m3",
+        model=settings.embedding_model,
         dimension=settings.embedding_dimension,
         embeddings=vectors,
     )
