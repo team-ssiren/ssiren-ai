@@ -121,7 +121,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | sido | `String` | No | 시/도 |
 | sigungu | `String` | No | 시/군/구 |
 | eupmyeondong | `String` | No | 읍/면/동 |
-| images | `MultipartFile[]` | No | 제보 이미지. 0~5장, 장당 최대 10MB, `image/*` |
+| images | `MultipartFile[]` | No | 제보 이미지. 0~5장, 장당 최대 50MB, `image/*`. OpenAI 전송 전 최대 1M px 로 다운스케일됨 |
 
 ### Response Body
 
@@ -476,7 +476,8 @@ BE 가 검색한 `context.reports` 를 근거로 답변을 생성한다. 제공�
 | code | HTTP | 설명 |
 | --- | --- | --- |
 | validation_error | 422 | 요청 검증 실패(필드 누락/형식 오류, 이미지 개수·MIME 위반, 임베딩 배치 초과) |
-| payload_too_large | 413 | 이미지 용량 초과(장당 최대 10MB) |
+| payload_too_large | 413 | 이미지 용량 초과(장당 최대 50MB) |
+| invalid_image | 422 | 이미지 디코딩 실패(손상/지원하지 않는 형식) |
 | llm_upstream_error | 502 | OpenAI 호출 실패(타임아웃/5xx/레이트리밋, 재시도 후) |
 | llm_refusal | 422 | LLM 이 구조화 응답을 거부 |
 | embedding_error | 500 | 임베딩 계산 실패 |

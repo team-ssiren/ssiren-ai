@@ -37,3 +37,10 @@ class EmbeddingError(AppError):
 
     code = "embedding_error"
     http_status = 500
+
+
+class InvalidImageError(AppError):
+    """Uploaded image could not be decoded."""
+
+    code = "invalid_image"
+    http_status = 422
