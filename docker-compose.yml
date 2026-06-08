@@ -1,0 +1,9 @@
+services:
+  ai:
+    build:
+      context: .
+    container_name: ssiren-ai
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
