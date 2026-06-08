@@ -44,7 +44,10 @@ class Settings(BaseSettings):
 
     # --- Analyze (① multimodal) guards ---
     analyze_max_images: int = Field(default=5)
-    analyze_max_image_mb: int = Field(default=10)
+    analyze_max_image_mb: int = Field(default=50, description="Max upload size per image")
+    analyze_max_image_pixels: int = Field(
+        default=1_000_000, description="Downscale to <= this many pixels before sending to OpenAI"
+    )
 
     # --- Domain thresholds (defaults; BE owns final policy) ---
     chatbot_history_max_turns: int = Field(default=10)

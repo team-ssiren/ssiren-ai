@@ -6,11 +6,14 @@
 
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from starlette.concurrency import run_in_threadpool
+
+from app.config import get_settings
 from app.core.concurrency import embedding_slot
+from app.core.image import to_data_url
 from app.core.structured import complete_structured
 from app.prompts.analyze import build_messages
 from app.schemas.report import AnalysisLLMOutput, AnalyzeResponse
@@ -40,13 +43,17 @@ def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
-def _data_url(image: ImageInput) -> str:
-    b64 = base64.b64encode(image.data).decode("ascii")
-    return f"data:{image.content_type};base64,{b64}"
-
-
 async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
+    settings = get_settings()
     occurred_at = inp.occurred_at or datetime.now().isoformat(timespec="seconds")
+
+    # Downscale each image to the pixel budget (CPU-bound -> threadpool).
+    image_data_urls = [
+        await run_in_threadpool(
+            to_data_url, img.data, img.content_type, settings.analyze_max_image_pixels
+        )
+        for img in inp.images
+    ]
 
     messages = build_messages(
         content=inp.content,
@@ -57,7 +64,7 @@ async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
         sido=inp.sido,
         sigungu=inp.sigungu,
         eupmyeondong=inp.eupmyeondong,
-        image_data_urls=[_data_url(img) for img in inp.images],
+        image_data_urls=image_data_urls,
     )
 
     llm: AnalysisLLMOutput = await complete_structured(

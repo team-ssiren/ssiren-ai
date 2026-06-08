@@ -1,6 +1,9 @@
 """Phase 2-2: analyzer pipeline (mocked LLM + embedder) and prompt assembly."""
 
+import io
+
 import pytest
+from PIL import Image
 
 from app.prompts.analyze import build_messages, get_system_prompt
 from app.schemas.report import AnalysisLLMOutput
@@ -14,6 +17,12 @@ def anyio_backend():
 
 async def _stub_embed(texts):
     return [[0.1] * 1536 for _ in texts]
+
+
+def _img_bytes(w: int = 20, h: int = 20) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (120, 120, 120)).save(buf, format="JPEG")
+    return buf.getvalue()
 
 
 def _make_llm(risk=62.5, conf=0.9, fscore=8.0) -> AnalysisLLMOutput:
@@ -58,7 +67,7 @@ async def test_analyze_assembles_response_with_embedding(monkeypatch):
             content="도로가 파였어요",
             latitude=36.3665,
             longitude=127.3447,
-            images=[analyzer.ImageInput(data=b"\xff\xd8\xff", content_type="image/jpeg")],
+            images=[analyzer.ImageInput(data=_img_bytes(), content_type="image/jpeg")],
         )
     )
 
