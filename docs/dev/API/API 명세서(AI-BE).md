@@ -35,6 +35,7 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | 임베딩 | ② 텍스트 임베딩(백필/재계산) | POST | /internal/v1/embeddings | application/json |
 | 챗봇 | ③ 의도 라우팅(plan) | POST | /internal/v1/chatbot:plan | application/json |
 | 챗봇 | ③ 근거 기반 응답(answer) | POST | /internal/v1/chatbot:answer | application/json |
+| 챗봇 | ③ 세션 제목 생성(title) | POST | /internal/v1/chatbot:title | application/json |
 | 메타 | 헬스 체크 | GET | /health | - |
 | 메타 | 운영 메트릭 | GET | /metrics | - |
 
@@ -386,6 +387,52 @@ BE 가 검색한 `context.reports` 를 근거로 답변을 생성한다. 제공�
 | --- | --- | --- |
 | answer | `String` | 근거 기반 응답(한국어) |
 | usedReportIds | `Integer[]` | 답변에 실제 활용한 reportId 목록. 없으면 `[]` |
+
+---
+
+## ③ 챗봇 — 세션 제목 (title)
+
+대화의 첫 메시지(선택적으로 첫 응답)를 받아 세션 목록에 표시할 짧은 제목을 생성한다. stateless.
+
+### Example request
+
+`POST /internal/v1/chatbot:title`
+
+### Headers
+
+| Header | Type | Required | Description |
+| --- | --- | --- | --- |
+| Content-Type | `String` | Yes | `application/json` |
+
+### Request Body
+
+```json
+{
+  "question": "이 근처에 위험한 제보 있어?",
+  "answer": "네, 궁동 도로 파손 이슈가 있어요."
+}
+```
+
+### Request Fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| question | `String` | Yes | 첫 사용자 메시지 |
+| answer | `String` | No | 첫 어시스턴트 응답. 있으면 제목 정확도 향상 |
+
+### Response Body
+
+```json
+{
+  "title": "인근 위험 제보 문의"
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| title | `String` | 세션 제목(16자 이내 명사구). 잡담뿐이면 "일반 문의" 류 |
 
 ---
 

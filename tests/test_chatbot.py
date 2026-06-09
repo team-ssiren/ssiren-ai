@@ -5,13 +5,15 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import chatbot as route
 from app.main import app
-from app.prompts.chatbot import build_answer_messages, build_plan_messages
+from app.prompts.chatbot import build_answer_messages, build_plan_messages, build_title_messages
 from app.schemas.chatbot import (
     ChatAnswerRequest,
     ChatAnswerResult,
     ChatContext,
     ChatMessage,
     ChatPlanResult,
+    ChatTitleRequest,
+    ChatTitleResult,
     ContextReport,
 )
 from app.services import chatbot
@@ -130,3 +132,37 @@ def test_answer_route(monkeypatch):
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["usedReportIds"] == []
+
+
+# --- title --------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_title_service(monkeypatch):
+    async def fake_cs(*, messages, schema, **kw):
+        assert schema is ChatTitleResult
+        # first message present in the user turn
+        assert any("이 근처 위험" in m["content"] for m in messages if m["role"] == "user")
+        return ChatTitleResult(title="근처 위험 제보 문의")
+
+    monkeypatch.setattr(chatbot, "complete_structured", fake_cs)
+    out = await chatbot.title(ChatTitleRequest(question="이 근처 위험한 제보 있어?"))
+    assert out.title == "근처 위험 제보 문의"
+
+
+def test_build_title_messages_includes_optional_answer():
+    with_answer = build_title_messages("이 근처 위험한 제보 있어?", "네, 도로 파손 이슈가 있어요.")
+    user = with_answer[-1]["content"]
+    assert "첫 메시지" in user
+    assert "첫 응답" in user
+
+    without = build_title_messages("안녕", None)
+    assert "첫 응답" not in without[-1]["content"]
+
+
+def test_title_route(monkeypatch):
+    async def fake_title(req):
+        return ChatTitleResult(title="도로 파손 문의")
+
+    monkeypatch.setattr(route.chatbot, "title", fake_title)
+    resp = client.post("/internal/v1/chatbot:title", json={"question": "도로가 파였어요"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["title"] == "도로 파손 문의"

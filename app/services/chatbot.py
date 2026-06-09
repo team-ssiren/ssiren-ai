@@ -2,18 +2,25 @@
 
 plan: 질문+이력 → action 라우팅(ANSWER_DIRECT 면 답변 직접 생성).
 answer: BE 가 검색한 context.reports 근거로 답변 생성.
+title: 첫 메시지로 세션 제목 생성.
 """
 
 from __future__ import annotations
 
 from app.config import get_settings
 from app.core.structured import complete_structured
-from app.prompts.chatbot import build_answer_messages, build_plan_messages
+from app.prompts.chatbot import (
+    build_answer_messages,
+    build_plan_messages,
+    build_title_messages,
+)
 from app.schemas.chatbot import (
     ChatAnswerRequest,
     ChatAnswerResult,
     ChatPlanRequest,
     ChatPlanResult,
+    ChatTitleRequest,
+    ChatTitleResult,
 )
 
 
@@ -38,3 +45,8 @@ async def answer(req: ChatAnswerRequest) -> ChatAnswerResult:
         limit=settings.chatbot_history_max_turns,
     )
     return await complete_structured(messages=messages, schema=ChatAnswerResult)
+
+
+async def title(req: ChatTitleRequest) -> ChatTitleResult:
+    messages = build_title_messages(question=req.question, answer=req.answer)
+    return await complete_structured(messages=messages, schema=ChatTitleResult)

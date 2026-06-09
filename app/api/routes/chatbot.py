@@ -1,4 +1,4 @@
-"""③ 챗봇 엔드포인트 — POST /internal/v1/chatbot:plan, :answer."""
+"""③ 챗봇 엔드포인트 — POST /internal/v1/chatbot:plan, :answer, :title."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from app.schemas.chatbot import (
     ChatAnswerResult,
     ChatPlanRequest,
     ChatPlanResult,
+    ChatTitleRequest,
+    ChatTitleResult,
 )
 from app.services import chatbot
 
@@ -23,3 +25,8 @@ async def chatbot_plan(req: ChatPlanRequest) -> ChatPlanResult:
 @router.post("/chatbot:answer", response_model=ChatAnswerResult)
 async def chatbot_answer(req: ChatAnswerRequest) -> ChatAnswerResult:
     return await chatbot.answer(req)
+
+
+@router.post("/chatbot:title", response_model=ChatTitleResult)
+async def chatbot_title(req: ChatTitleRequest) -> ChatTitleResult:
+    return await chatbot.title(req)

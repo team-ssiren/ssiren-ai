@@ -12,7 +12,7 @@
 |---|---|---|
 | ① 구조화된 제보 생성 | `POST /internal/v1/reports:analyze` | 멀티모달(이미지+텍스트) → 구조화 JSON + 임베딩 |
 | ② 유사 제보 임베딩 | `POST /internal/v1/embeddings` | text-embedding-3-small 벡터 (백필/재계산) |
-| ③ 챗봇 | `POST /internal/v1/chatbot:plan` · `:answer` | BE 주도 2-스텝 RAG |
+| ③ 챗봇 | `POST /internal/v1/chatbot:plan` · `:answer` · `:title` | BE 주도 2-스텝 RAG + 세션 제목 생성 |
 
 ## 스택
 
