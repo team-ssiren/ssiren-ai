@@ -141,20 +141,34 @@ async def test_title_service(monkeypatch):
         assert schema is ChatTitleResult
         # first message present in the user turn
         assert any("이 근처 위험" in m["content"] for m in messages if m["role"] == "user")
-        return ChatTitleResult(title="근처 위험 제보 문의")
+        return ChatTitleResult(title="인근 위험 제보")  # <= 10 chars
 
     monkeypatch.setattr(chatbot, "complete_structured", fake_cs)
     out = await chatbot.title(ChatTitleRequest(question="이 근처 위험한 제보 있어?"))
-    assert out.title == "근처 위험 제보 문의"
+    assert out.title == "인근 위험 제보"
+
+
+@pytest.mark.anyio
+async def test_title_truncated_to_10_chars(monkeypatch):
+    async def fake_cs(*, messages, schema, **kw):
+        return ChatTitleResult(title="도로파손신고처리상태확인")  # 12 chars
+
+    monkeypatch.setattr(chatbot, "complete_structured", fake_cs)
+    out = await chatbot.title(ChatTitleRequest(question="..."))
+    assert len(out.title) == 10
+    assert out.title == "도로파손신고처리상태"
 
 
 def test_build_title_messages_includes_optional_answer():
-    with_answer = build_title_messages("이 근처 위험한 제보 있어?", "네, 도로 파손 이슈가 있어요.")
+    with_answer = build_title_messages(
+        "이 근처 위험한 제보 있어?", "네, 도로 파손 이슈가 있어요.", 10
+    )
     user = with_answer[-1]["content"]
     assert "첫 메시지" in user
     assert "첫 응답" in user
+    assert "10자 이내" in with_answer[0]["content"]
 
-    without = build_title_messages("안녕", None)
+    without = build_title_messages("안녕", None, 10)
     assert "첫 응답" not in without[-1]["content"]
 
 

@@ -87,20 +87,21 @@ def build_answer_messages(
 
 
 # --- Title (세션 제목 생성) ---------------------------------------------------
-TITLE_SYSTEM = """당신은 '싸이렌'(지역 안전 제보 앱) 챗봇의 대화 제목 생성기입니다.
+def _title_system(max_chars: int) -> str:
+    return f"""당신은 '싸이렌'(지역 안전 제보 앱) 챗봇의 대화 제목 생성기입니다.
 첫 메시지(필요 시 첫 응답)를 보고 세션 목록에 표시할 짧은 한국어 제목을 만듭니다.
 
 규칙:
-- 핵심 주제만 담아 16자 이내로 간결하게.
-- 따옴표·마침표·이모지 없이 명사구 형태로.
+- 반드시 {max_chars}자 이내. 공백 포함 {max_chars}자를 넘기지 마세요.
+- 핵심 주제만 담은 명사구. 따옴표·마침표·이모지 없이.
 - 인사·잡담뿐이면 "일반 문의" 처럼 무난한 제목."""
 
 
-def build_title_messages(question: str, answer: str | None) -> list[dict]:
+def build_title_messages(question: str, answer: str | None, max_chars: int) -> list[dict]:
     user = f"[첫 메시지]\n{question}"
     if answer:
         user += f"\n\n[첫 응답]\n{answer}"
     return [
-        {"role": "system", "content": TITLE_SYSTEM},
+        {"role": "system", "content": _title_system(max_chars)},
         {"role": "user", "content": user},
     ]

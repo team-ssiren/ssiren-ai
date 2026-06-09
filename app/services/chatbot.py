@@ -48,5 +48,12 @@ async def answer(req: ChatAnswerRequest) -> ChatAnswerResult:
 
 
 async def title(req: ChatTitleRequest) -> ChatTitleResult:
-    messages = build_title_messages(question=req.question, answer=req.answer)
-    return await complete_structured(messages=messages, schema=ChatTitleResult)
+    max_chars = get_settings().chatbot_title_max_chars
+    messages = build_title_messages(
+        question=req.question, answer=req.answer, max_chars=max_chars
+    )
+    result = await complete_structured(messages=messages, schema=ChatTitleResult)
+    # Hard cap: the prompt requests <= max_chars, but enforce it regardless
+    # (truncate, then drop any trailing space left by the cut).
+    result.title = result.title.strip()[:max_chars].rstrip()
+    return result
