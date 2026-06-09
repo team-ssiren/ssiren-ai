@@ -78,3 +78,15 @@ class ChatAnswerResult(BaseModel):
 
     answer: str
     usedReportIds: list[int]
+
+
+# --- Title (세션 제목 생성) ---------------------------------------------------
+class ChatTitleRequest(BaseModel):
+    question: str  # 첫 사용자 메시지
+    answer: str | None = None  # (선택) 첫 어시스턴트 응답 — 있으면 제목 정확도 향상
+
+
+class ChatTitleResult(BaseModel):
+    """LLM 출력 = 응답. 세션 목록에 표시할 짧은 제목."""
+
+    title: str
