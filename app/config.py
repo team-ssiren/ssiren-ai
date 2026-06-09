@@ -51,6 +51,7 @@ class Settings(BaseSettings):
 
     # --- Domain thresholds (defaults; BE owns final policy) ---
     chatbot_history_max_turns: int = Field(default=10)
+    chatbot_title_max_chars: int = Field(default=10, description="Session title length cap")
 
 
 @lru_cache
