@@ -184,9 +184,27 @@ _LEAVES: list[CategoryLeaf] = [
         parent=ParentCategory.ETC,
         default_agency_type=AgencyType.LOCAL_GOV,
         default_department="민원실",
-        definition="위 유형에 해당하지 않거나 분류가 모호한 제보.",
-        includes=["분류 애매", "이미지/텍스트 불충분"],
-        excludes=["억지로 끼워맞추지 말고 여기로 분류"],
+        definition="유효한 제보이나 위 13개 세부 유형에 맞지 않는 기타 유형. 정상 처리 대상.",
+        includes=["기존 유형에 없는 실제 생활 문제"],
+        excludes=[
+            "내용·이미지가 불충분/무관/확인불가하면 INSUFFICIENT",
+            "억지로 끼워맞추지 말 것",
+        ],
+    ),
+    CategoryLeaf(
+        code="INSUFFICIENT",
+        ko="제보 불성립",
+        parent=ParentCategory.ETC,
+        # 라우팅하지 않음 — BE 가 검수/반려 큐로 보냄(아래 필드는 형식상 기본값).
+        default_agency_type=AgencyType.LOCAL_GOV,
+        default_department="민원실",
+        definition="내용·이미지가 불충분/무관/확인 불가하여 처리 가능한 제보로 성립하지 않음.",
+        includes=["내용/이미지 불충분", "문제 특정 불가", "무관한 사진/텍스트", "테스트성 입력"],
+        excludes=[
+            "문제를 식별할 수 있으면(흐릿해도) 해당 유형 + 낮은 confidence",
+            "유효하나 유형이 없으면 ETC_OTHER",
+            "의도적 허위/장난은 falseReport 로 별도 표기",
+        ],
     ),
 ]
 
@@ -203,7 +221,9 @@ TIE_BREAK_RULES: list[str] = [
     "가로등/조명 고장 → 교통이 아니라 STREETLIGHT(시설물).",
     "조명이 어두워 '불안'한 치안 우려 → STREETLIGHT 가 아니라 SUSPICIOUS(치안).",
     "보도블록 파손 자체 → ROAD_DAMAGE, 그로 인한 빙판/미끄럼 → FALL_RISK.",
-    "분류가 모호하거나 이미지/텍스트가 무관·불충분 → 억지 분류 금지, ETC_OTHER.",
+    "유효하나 기존 유형에 맞지 않으면 ETC_OTHER(억지 분류 금지).",
+    "내용·이미지가 불충분/무관/확인불가하여 문제를 특정할 수 없으면 INSUFFICIENT(제보 불성립). "
+    "단, 흐릿해도 문제를 식별할 수 있으면 해당 유형 + 낮은 confidence.",
 ]
 
 
