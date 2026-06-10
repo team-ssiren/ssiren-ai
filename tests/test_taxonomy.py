@@ -28,12 +28,13 @@ EXPECTED_LEAVES = {
     "HOMELESS",
     "FIRE_EMERGENCY",
     "ETC_OTHER",
+    "INSUFFICIENT",
 }
 
 
 def test_leaf_set_is_exact():
     assert set(leaf_codes()) == EXPECTED_LEAVES
-    assert len(CATEGORIES) == 14
+    assert len(CATEGORIES) == 15
 
 
 def test_enum_matches_categories():
@@ -64,6 +65,16 @@ def test_tie_break_mappings():
     assert parent_of("DRUNK_PERSON") is ParentCategory.PUBLIC_SAFETY
     # 가로등 → 시설물
     assert parent_of("STREETLIGHT") is ParentCategory.FACILITY
+
+
+def test_etc_and_insufficient_are_distinct_under_etc():
+    # 유효 기타 vs 제보 불성립 — 둘 다 '기타' 하위지만 별개 코드
+    assert parent_of("ETC_OTHER") is ParentCategory.ETC
+    assert parent_of("INSUFFICIENT") is ParentCategory.ETC
+    assert "INSUFFICIENT" in leaf_codes()
+    # 타이브레이크 규칙에 둘의 구분이 명시되어 있어야 함
+    block = few_shot_block()
+    assert "INSUFFICIENT" in block and "ETC_OTHER" in block
 
 
 def test_unknown_code_raises():
