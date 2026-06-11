@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -17,7 +18,9 @@ from app.core.image import to_data_url
 from app.core.structured import complete_structured
 from app.prompts.analyze import build_messages
 from app.schemas.report import AnalysisLLMOutput, AnalyzeResponse
-from app.services import embedder
+from app.services import embedder, similar_complaint
+
+logger = logging.getLogger("ssairen.analyzer")
 
 
 @dataclass
@@ -54,6 +57,7 @@ async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
         )
         for img in inp.images
     ]
+    similar_complaints = await _find_similar_complaints(inp.content)
 
     messages = build_messages(
         content=inp.content,
@@ -65,6 +69,7 @@ async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
         sigungu=inp.sigungu,
         eupmyeondong=inp.eupmyeondong,
         image_data_urls=image_data_urls,
+        similar_complaints=similar_complaints,
     )
 
     llm: AnalysisLLMOutput = await complete_structured(
@@ -88,3 +93,11 @@ async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
     data["occurredAt"] = occurred_at  # echo the resolved value (single source vs contents.when)
     data["embedding"] = embedding
     return AnalyzeResponse.model_validate(data)
+
+
+async def _find_similar_complaints(content: str):
+    try:
+        return await similar_complaint.find_top_similar_cases(content)
+    except Exception as exc:
+        logger.warning("Similar complaint RAG lookup failed: %s", exc.__class__.__name__)
+        return []
