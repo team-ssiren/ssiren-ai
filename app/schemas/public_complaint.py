@@ -61,6 +61,32 @@ class SimilarComplaintCase(BaseModel):
         )
 
 
+class RankedSimilarComplaintCase(BaseModel):
+    """Similar complaint case ranked by embedding similarity."""
+
+    title: str
+    content: str
+    createDate: datetime | None
+    mainSubName: str | None
+    departmentName: str | None
+    embeddingScore: float
+
+    @classmethod
+    def from_case(
+        cls,
+        case: SimilarComplaintCase,
+        embedding_score: float,
+    ) -> RankedSimilarComplaintCase:
+        return cls(
+            title=case.title,
+            content=case.content,
+            createDate=case.createDate,
+            mainSubName=case.mainSubName,
+            departmentName=case.departmentName,
+            embeddingScore=embedding_score,
+        )
+
+
 _EXPECTED_FIELDS = {"title", "content", "create_date", "main_sub_name", "dep_name"}
 
 
