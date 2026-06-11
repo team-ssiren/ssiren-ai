@@ -1,15 +1,15 @@
-"""① 구조화 분석 스키마.
+"""① 구조화 분석 스키마 (응답 계약, camelCase).
 
-`API 명세서(AI-BE).md` 의 응답 계약과 1:1 (camelCase). LLM 은 임베딩을 제외한
-`AnalysisLLMOutput` 을 Structured Output(enum 강제)으로 생성하고, 서버가 임베딩을
-합성해 `AnalyzeResponse` 로 반환한다.
+다단계 파이프라인이 단계별로 채운 값을 서버가 조립해 `AnalyzeResponse` 로 반환한다:
+- category(대/소분류)·analysis·기관/부서 추천은 LLM(1~3차) 산출
+- embedding 은 서버가 합성, resolvedAgency 는 SQLite 조직표에서 해소
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.core.taxonomy import CategoryCode
+from app.core.taxonomy import CategoryCode, MajorCategory
 
 
 class FiveW1H(BaseModel):
@@ -23,6 +23,7 @@ class FiveW1H(BaseModel):
 
 
 class CategoryResult(BaseModel):
+    majorCode: MajorCategory
     categoryCode: CategoryCode
     confidence: float  # 0.0 ~ 1.0
 
@@ -44,12 +45,22 @@ class Analysis(BaseModel):
     emergencyGuide: EmergencyGuide
 
 
-class AnalysisLLMOutput(BaseModel):
-    """LLM 이 Structured Output 으로 생성하는 부분 (임베딩 제외).
+class ResolvedAgency(BaseModel):
+    """배정된 기관·부서.
 
-    모든 필드는 required (기본값 금지) — OpenAI strict structured outputs 규약.
-    nullable 은 `X | None` 으로 표현.
+    department/agencyType 는 AI 가 결정한 값(후보 부서로 enum 제약)을 항상 담는다.
+    name/phone 은 조직표에서 해소되면 채워지고, 못 찾으면 null(resolved=False).
     """
+
+    agencyType: str | None  # 기관유형 (부서 행에서 도출)
+    department: str | None  # 최하위기관명 e.g. 건설과 (AI 결정)
+    name: str | None  # 전체기관명 e.g. 분당구청 (해소 시)
+    phone: str | None  # 부서 전화(없으면 기관 전화)
+    resolved: bool  # 조직표에서 실제 기관 행을 찾았는지
+
+
+class AnalysisLLMOutput(BaseModel):
+    """LLM(1~3차)이 결정한 분석 본문 (임베딩/조직표 해소 제외)."""
 
     title: str
     contents: FiveW1H
@@ -57,12 +68,12 @@ class AnalysisLLMOutput(BaseModel):
     category: CategoryResult
     riskScore: float  # 0 ~ 100
     analysis: Analysis
+    assignmentReason: str  # 이 부서로 배정한 근거(가이드·유사사례·법령 기반)
 
 
 class AnalyzeResponse(AnalysisLLMOutput):
-    """API 응답 = LLM 출력 + 서버가 합성한 필드."""
+    """API 응답 = 분석 본문 + 서버 합성/해소 필드."""
 
-    # 서버가 해소한 발생 시각(요청값 또는 서버 기본값). contents.when 과 동일 출처라
-    # BE 는 이 값을 reportDraft.occurredAt 으로 그대로 사용하면 일관된다.
     occurredAt: str
     embedding: list[float]
+    resolvedAgency: ResolvedAgency

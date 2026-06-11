@@ -22,15 +22,27 @@ _FAKE = AnalyzeResponse.model_validate(
             "summary": "궁동 도로 파손.",
         },
         "keywords": ["도로 파손"],
-        "category": {"categoryCode": "ROAD_DAMAGE", "confidence": 0.9},
+        "category": {
+            "majorCode": "INFRASTRUCTURE_ROAD",
+            "categoryCode": "ROAD_DAMAGE",
+            "confidence": 0.9,
+        },
         "riskScore": 62.5,
         "analysis": {
             "detectedObjects": ["도로"],
             "falseReport": {"isSuspicious": False, "score": 8.0, "reason": "ok"},
             "emergencyGuide": {"isEmergency": False, "message": None},
         },
+        "assignmentReason": "도로 시설 보수는 건설과의 소관 사무이다.",
         "occurredAt": "2026-06-05T15:30:00",
         "embedding": [0.1] * 1024,
+        "resolvedAgency": {
+            "agencyType": "지자체",
+            "department": "건설과",
+            "name": "분당구청",
+            "phone": "031 729 7381",
+            "resolved": True,
+        },
     }
 )
 
