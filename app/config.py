@@ -26,14 +26,25 @@ class Settings(BaseSettings):
 
     # --- OpenAI (LLM) ---
     openai_api_key: str = Field(..., description="OpenAI API key (required)")
-    openai_model: str = Field(default="gpt-5.5", description="Chat/vision model id")
+    openai_base_url: str | None = Field(
+        default=None, description="OpenAI API base URL override (proxy/Azure/compatible)"
+    )
+    openai_model: str = Field(
+        default="gpt-5.4-mini", description="Chat/vision model id (enrich step)"
+    )
+    classify_model: str = Field(
+        default="gpt-5.4-mini", description="Cheaper model for major/minor classification"
+    )
     llm_temperature: float = Field(default=0.0, description="Used only if llm_send_temperature")
     llm_send_temperature: bool = Field(
         default=False,
         description="GPT-5 family rejects non-default temperature; keep off for those models",
     )
     llm_timeout_seconds: float = Field(default=60.0)
-    llm_max_retries: int = Field(default=1)
+    llm_max_retries: int = Field(default=1, description="SDK transport retries (network/5xx/429)")
+    structured_output_max_retries: int = Field(
+        default=2, description="App-level retries when LLM output fails schema/JSON validation"
+    )
     llm_max_concurrency: int = Field(default=8, description="Max concurrent LLM calls")
 
     # --- Embeddings (OpenAI text-embedding-3-small) ---
@@ -55,6 +66,12 @@ class Settings(BaseSettings):
 
     # --- Data.go.kr ---
     data_gokr_api_key: str = Field(default="", description="Public data portal service key")
+
+    # --- SQLite (AI-only: assignment guide + org directory) ---
+    sqlite_db_path: str = Field(default="data/ssiren.db", description="AI-only SQLite DB path")
+    org_default_region_code: str = Field(
+        default="BUNDANG", description="Region key for org resolution (seed scope)"
+    )
 
 
 @lru_cache

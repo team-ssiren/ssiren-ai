@@ -1,91 +1,95 @@
-"""Phase 0-3: taxonomy SSOT integrity and reverse-lookups."""
+"""택소노미 SSOT 무결성 — 새 8 대분류 / 47 소분류 (+가상 2)."""
+
+from pathlib import Path
+
+import pytest
 
 from app.core.taxonomy import (
     CATEGORIES,
+    ETC_OTHER,
+    INSUFFICIENT,
     AgencyType,
     CategoryCode,
-    ParentCategory,
+    MajorCategory,
     agency_type_of,
+    candidate_agency_types,
     department_of,
-    few_shot_block,
     get_leaf,
+    is_virtual,
     leaf_codes,
+    major_block,
+    minor_block,
+    minors_of,
     parent_of,
 )
 
-EXPECTED_LEAVES = {
-    "ILLEGAL_PARKING",
-    "ROAD_DAMAGE",
-    "TRASH_DUMPING",
-    "ANIMAL_CARCASS",
-    "NOISE",
-    "STREETLIGHT",
-    "DANGEROUS_FACILITY",
-    "FALL_RISK",
-    "DRUNK_PERSON",
-    "YOUTH_RISK",
-    "SUSPICIOUS",
-    "HOMELESS",
-    "FIRE_EMERGENCY",
-    "ETC_OTHER",
-    "INSUFFICIENT",
-}
+RULEBOOK_DIR = Path(__file__).resolve().parent.parent / "docs" / "rules" / "database"
+NON_VIRTUAL = {c for c in leaf_codes() if not is_virtual(c)}
 
 
-def test_leaf_set_is_exact():
-    assert set(leaf_codes()) == EXPECTED_LEAVES
-    assert len(CATEGORIES) == 15
+def test_counts():
+    assert len(CATEGORIES) == 49  # 47 leaves + ETC_OTHER + INSUFFICIENT
+    assert len(NON_VIRTUAL) == 47
+    assert len(list(MajorCategory)) == 8
 
 
 def test_enum_matches_categories():
     assert {c.value for c in CategoryCode} == set(CATEGORIES.keys())
 
 
+def test_folder_set_matches_taxonomy():
+    """폴더(룰북) 셋 == 비가상 택소노미 셋 — 드리프트 가드."""
+    folder_codes = {p.stem for p in RULEBOOK_DIR.glob("*/*.md")}
+    assert folder_codes == NON_VIRTUAL
+
+
 def test_every_leaf_well_formed():
     for code, leaf in CATEGORIES.items():
         assert leaf.code == code
-        assert leaf.ko
-        assert leaf.definition
-        assert isinstance(leaf.parent, ParentCategory)
+        assert leaf.ko and leaf.definition
+        assert isinstance(leaf.major, MajorCategory)
         assert isinstance(leaf.default_agency_type, AgencyType)
         assert leaf.default_department
 
 
+def test_minors_partition_majors():
+    """모든 비가상 리프가 정확히 한 대분류에 속하고, minors_of 로 복원된다."""
+    seen: set[str] = set()
+    for major in MajorCategory:
+        for leaf in minors_of(major):
+            assert leaf.major is major
+            seen.add(leaf.code)
+    assert seen == set(leaf_codes())
+
+
 def test_reverse_lookups():
-    assert parent_of("ROAD_DAMAGE") is ParentCategory.TRAFFIC
-    assert agency_type_of("DRUNK_PERSON") is AgencyType.POLICE
-    assert agency_type_of("FIRE_EMERGENCY") is AgencyType.FIRE
-    assert department_of("ANIMAL_CARCASS") == "청소행정과"
+    assert parent_of("MANHOLE_DRAIN_DAMAGE") is MajorCategory.INFRASTRUCTURE_ROAD
+    assert agency_type_of("FIRE_RISK") is AgencyType.FIRE
+    assert agency_type_of("SUSPICIOUS_ACTIVITY") is AgencyType.POLICE
+    assert department_of("MANHOLE_DRAIN_DAMAGE")  # non-empty fallback
 
 
-def test_tie_break_mappings():
-    # 도로 위 동물 사체 → 환경
-    assert parent_of("ANIMAL_CARCASS") is ParentCategory.ENVIRONMENT
-    # 주취자 → 치안
-    assert parent_of("DRUNK_PERSON") is ParentCategory.PUBLIC_SAFETY
-    # 가로등 → 시설물
-    assert parent_of("STREETLIGHT") is ParentCategory.FACILITY
+def test_virtual_codes():
+    assert is_virtual(ETC_OTHER) and is_virtual(INSUFFICIENT)
+    assert parent_of(ETC_OTHER) is MajorCategory.ETC
+    assert not is_virtual("MANHOLE_DRAIN_DAMAGE")
 
 
-def test_etc_and_insufficient_are_distinct_under_etc():
-    # 유효 기타 vs 제보 불성립 — 둘 다 '기타' 하위지만 별개 코드
-    assert parent_of("ETC_OTHER") is ParentCategory.ETC
-    assert parent_of("INSUFFICIENT") is ParentCategory.ETC
-    assert "INSUFFICIENT" in leaf_codes()
-    # 타이브레이크 규칙에 둘의 구분이 명시되어 있어야 함
-    block = few_shot_block()
-    assert "INSUFFICIENT" in block and "ETC_OTHER" in block
+def test_candidate_agency_types():
+    assert AgencyType.POLICE in candidate_agency_types(MajorCategory.PUBLIC_ORDER)
+    assert AgencyType.FIRE in candidate_agency_types(MajorCategory.LIFE_SAFETY)
+    assert candidate_agency_types(MajorCategory.INFRASTRUCTURE_ROAD) == (AgencyType.LOCAL_GOV,)
+
+
+def test_blocks_render():
+    mb = major_block()
+    for major in MajorCategory:
+        assert major.value in mb
+    block = minor_block(MajorCategory.INFRASTRUCTURE_ROAD)
+    assert "MANHOLE_DRAIN_DAMAGE" in block
+    assert "ILLEGAL_PARKING" not in block  # other major's leaf excluded
 
 
 def test_unknown_code_raises():
-    import pytest
-
     with pytest.raises(KeyError):
         get_leaf("NOPE")
-
-
-def test_few_shot_block_lists_all_codes():
-    block = few_shot_block()
-    for code in EXPECTED_LEAVES:
-        assert code in block
-    assert "타이브레이크" in block

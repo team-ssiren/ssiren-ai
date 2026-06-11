@@ -15,6 +15,7 @@ from app.api.routes import chatbot, embeddings, reports
 from app.config import Settings, get_settings
 from app.core import metrics
 from app.core.concurrency import init_semaphores
+from app.db.connection import run_schema
 
 logger = logging.getLogger("ssairen.startup")
 
@@ -35,6 +36,8 @@ async def lifespan(app: FastAPI):
         settings.llm_max_concurrency,
         settings.embedding_max_concurrency,
     )
+    run_schema()  # ensure AI SQLite (assignment guide + org directory) exists
+    logger.info("sqlite ready: %s", settings.sqlite_db_path)
     yield
 
 

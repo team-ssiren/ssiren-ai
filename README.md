@@ -10,7 +10,7 @@
 
 | 기능 | 엔드포인트 | 비고 |
 |---|---|---|
-| ① 구조화된 제보 생성 | `POST /internal/v1/reports:analyze` | 멀티모달(이미지+텍스트) → 구조화 JSON + 임베딩 |
+| ① 구조화된 제보 생성 | `POST /internal/v1/reports:analyze` | 멀티모달 → **다단계 분류(대→소) + 가이드/유사사례 보강 → 기관·부서 배정** + 임베딩 |
 | ② 유사 제보 임베딩 | `POST /internal/v1/embeddings` | text-embedding-3-small 벡터 (백필/재계산) |
 | ③ 챗봇 | `POST /internal/v1/chatbot:plan` · `:answer` · `:title` | BE 주도 2-스텝 RAG + 세션 제목 생성 |
 
@@ -39,7 +39,7 @@ curl http://localhost:8000/health
 
 - **헬스/메트릭**: `GET /health`(모델·버전), `GET /metrics`(LLM 호출수·토큰·평균지연·오류).
 - **동시성 제한**: `LLM_MAX_CONCURRENCY`(기본 8), `EMBEDDING_MAX_CONCURRENCY`(기본 8). 기동 시 세마포어 초기화.
-- **타임아웃/재시도**: `LLM_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`(OpenAI SDK 내장 재시도).
+- **타임아웃/재시도**: `LLM_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`(SDK 전송 재시도), `STRUCTURED_OUTPUT_MAX_RETRIES`(구조화 출력 스키마/JSON 검증 실패 시 앱 레벨 재시도, 기본 2).
 - **에러 규약**: 모든 오류는 `{"error":{"code","message","requestId"}}` 형태. LLM 장애는 502(`llm_upstream_error`)로 무중단 응답.
 - **⚠️ GPT-5 계열 주의**: `gpt-5.5` 는 기본 temperature(1)만 지원하므로 `LLM_SEND_TEMPERATURE=false`(기본) 로 둔다. 결정성은 Structured Outputs 가 담당.
 
@@ -53,12 +53,20 @@ uv run python scripts/live_smoke.py   # ① 분석 골든셋 + ③ 챗봇 검증
 
 ```
 app/
-  main.py        # FastAPI 엔트리포인트, /health
+  main.py        # FastAPI 엔트리포인트, /health, lifespan(run_schema)
   config.py      # 환경설정 (pydantic-settings)
-  api/           # 라우트 (phase 1+)
-  core/          # llm, structured-output, taxonomy (phase 0-2/0-3)
-  schemas/       # 요청/응답 Pydantic 모델
-  services/      # analyzer, embedder, chatbot
-  prompts/       # LLM 프롬프트
+  api/           # 라우트
+  core/          # llm, structured-output, taxonomy(8 대분류/47 소분류 SSOT)
+  db/            # AI 전용 SQLite — schema.sql, connection, repository
+  schemas/       # 요청/응답 + 단계별(pipeline) Pydantic 모델
+  services/      # analyzer(다단계), embedder, chatbot
+  prompts/       # classify(대/소분류) · enrich(보강) · common
+data/
+  seed/          # 분당기관부서.xlsx (조직표 시드)
+  ssiren.db      # 생성물 — 룰북 가이드 + 조직표 (커밋)
+scripts/
+  ingest_rulebook_and_org.py   # docs/rules + 시드 xlsx → SQLite 적재(멱등)
 tests/
 ```
+
+> **DB 빌드**: `uv run python scripts/ingest_rulebook_and_org.py` — `docs/rules/database/*.md`(소분류 가이드 평문)와 `data/seed/분당기관부서.xlsx`(조직표)를 `data/ssiren.db`로 적재한다.

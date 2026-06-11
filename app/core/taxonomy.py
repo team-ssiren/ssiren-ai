@@ -1,15 +1,21 @@
 """카테고리 택소노미 — 단일 진실 소스(SSOT).
 
-AI는 **리프 코드 1개만** 선택하고(enum 강제), 상위 카테고리·기본 부서·기관유형은
-이 테이블에서 결정론적으로 역산한다. 분류 스키마(② report)·프롬프트 few-shot·
-챗봇 SEARCH_NEARBY 의 categoryCode 가 모두 이 파일을 단일 소스로 사용한다.
+대분류(8) · 소분류(47) + 가상코드(ETC_OTHER, INSUFFICIENT) 2종.
+코드/한글/정의는 `docs/rules/database/<MAJOR>/<MINOR>.md` 폴더 구조를 권위 소스로 하며,
+한글 라벨·정리 기준은 `docs/rules/index.md` 표를 참고해 정리했다.
+
+다단계 분석 파이프라인이 이 파일을 단일 소스로 사용한다:
+- 1차 LLM: 대분류 선택(`MajorCategory` enum)
+- 2차 LLM: 소분류 선택(대분류별 동적 enum, `minors_of`)
+- 3차 LLM: 기관종류(`AgencyType`) 결정 — 후보 부서는 SQLite 조직표에서 공급
+`default_agency_type`/`default_department` 는 이제 **fallback** 이다(실값은 LLM+SQLite).
 
 ⚠️ 코드셋 변경 시 BE 의 카테고리 ID 매핑과 반드시 동기화할 것.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -19,217 +25,223 @@ class AgencyType(StrEnum):
     LOCAL_GOV = "지자체"
     POLICE = "경찰"
     FIRE = "소방"
+    HEALTH = "보건"
 
 
-class ParentCategory(StrEnum):
-    """대분류 (PRD AI-002)."""
+class MajorCategory(StrEnum):
+    """대분류 (코드값). 한글 라벨은 MAJOR_KO 참조."""
 
-    PUBLIC_SAFETY = "치안"
-    TRAFFIC = "교통"
-    ENVIRONMENT = "환경"
-    FACILITY = "시설물"
-    LIVING = "생활불편"
-    DISASTER = "재난안전"
-    WELFARE = "복지"
-    ETC = "기타"
+    TRAFFIC = "TRAFFIC"
+    INFRASTRUCTURE_ROAD = "INFRASTRUCTURE_ROAD"
+    LIVING_INCONVENIENCE = "LIVING_INCONVENIENCE"
+    LIFE_SAFETY = "LIFE_SAFETY"
+    CONSTRUCTION_SITE = "CONSTRUCTION_SITE"
+    PUBLIC_ORDER = "PUBLIC_ORDER"
+    PUBLIC_HEALTH_WELFARE = "PUBLIC_HEALTH_WELFARE"
+    ETC = "ETC"
+
+
+MAJOR_KO: dict[MajorCategory, str] = {
+    MajorCategory.TRAFFIC: "교통",
+    MajorCategory.INFRASTRUCTURE_ROAD: "시설물",
+    MajorCategory.LIVING_INCONVENIENCE: "생활불편",
+    MajorCategory.LIFE_SAFETY: "생활안전",
+    MajorCategory.CONSTRUCTION_SITE: "공사장",
+    MajorCategory.PUBLIC_ORDER: "치안",
+    MajorCategory.PUBLIC_HEALTH_WELFARE: "보건복지",
+    MajorCategory.ETC: "기타",
+}
+
+MAJOR_ROLE: dict[MajorCategory, str] = {
+    MajorCategory.TRAFFIC: "차량·주차·교통질서 관련 민원",
+    MajorCategory.INFRASTRUCTURE_ROAD: "도로·보도·교통시설·공공시설 파손·고장",
+    MajorCategory.LIVING_INCONVENIENCE: "쓰레기·광고물·소음·악취·오염 등 생활환경 민원",
+    MajorCategory.LIFE_SAFETY: "침수·벌집·동물·화재·가스·전기 위험 등 안전 제보",
+    MajorCategory.CONSTRUCTION_SITE: "공사장 안전·소음·균열·통행불편",
+    MajorCategory.PUBLIC_ORDER: "취객·소란·범죄의심·방범불안 등 112 연계형 제보",
+    MajorCategory.PUBLIC_HEALTH_WELFARE: "위생·식품·장애인 편의시설·취약계층 위험",
+    MajorCategory.ETC: "위 대분류에 맞지 않는 기타·제보 불성립",
+}
+
+# 대분류별 후보 기관유형 — 3차 단계에서 조직표 후보 부서를 가져올 때의 union 휴리스틱.
+_CANDIDATE_AGENCY_TYPES: dict[MajorCategory, tuple[AgencyType, ...]] = {
+    MajorCategory.TRAFFIC: (AgencyType.LOCAL_GOV, AgencyType.POLICE),
+    MajorCategory.INFRASTRUCTURE_ROAD: (AgencyType.LOCAL_GOV,),
+    MajorCategory.LIVING_INCONVENIENCE: (AgencyType.LOCAL_GOV, AgencyType.HEALTH),
+    MajorCategory.LIFE_SAFETY: (AgencyType.LOCAL_GOV, AgencyType.FIRE),
+    MajorCategory.CONSTRUCTION_SITE: (AgencyType.LOCAL_GOV,),
+    MajorCategory.PUBLIC_ORDER: (AgencyType.POLICE,),
+    MajorCategory.PUBLIC_HEALTH_WELFARE: (AgencyType.HEALTH, AgencyType.LOCAL_GOV),
+    MajorCategory.ETC: (AgencyType.LOCAL_GOV,),
+}
+
+# 가상 코드 — 폴더(룰북) 없음. INSUFFICIENT 는 라우팅 안 함(BE 반려 큐).
+ETC_OTHER = "ETC_OTHER"
+INSUFFICIENT = "INSUFFICIENT"
+_VIRTUAL_CODES = frozenset({ETC_OTHER, INSUFFICIENT})
 
 
 @dataclass(frozen=True)
 class CategoryLeaf:
     code: str
     ko: str
-    parent: ParentCategory
+    major: MajorCategory
     default_agency_type: AgencyType
-    default_department: str
+    default_department: str  # fallback only — 실 부서는 LLM+SQLite
     definition: str
-    includes: list[str] = field(default_factory=list)
-    excludes: list[str] = field(default_factory=list)
 
 
-# --- 리프 정의 (14종) ---------------------------------------------------------
+# --- 리프 정의 (47 + 가상 2) ---------------------------------------------------
+# (code, ko, major, default_agency_type, default_department, definition)
+_T, _I, _L, _S, _C, _P, _H, _E = (
+    MajorCategory.TRAFFIC,
+    MajorCategory.INFRASTRUCTURE_ROAD,
+    MajorCategory.LIVING_INCONVENIENCE,
+    MajorCategory.LIFE_SAFETY,
+    MajorCategory.CONSTRUCTION_SITE,
+    MajorCategory.PUBLIC_ORDER,
+    MajorCategory.PUBLIC_HEALTH_WELFARE,
+    MajorCategory.ETC,
+)
+_GOV, _POL, _FIRE, _HLT = (
+    AgencyType.LOCAL_GOV,
+    AgencyType.POLICE,
+    AgencyType.FIRE,
+    AgencyType.HEALTH,
+)
+
+_LEAF_SPECS: list[tuple[str, str, MajorCategory, AgencyType, str, str]] = [
+    # 교통
+    ("ILLEGAL_PARKING", "불법주정차", _T, _GOV, "경제교통과",
+     "주정차 금지구역 등 불법 주정차(세부 위치별 분류는 하나로 통합)."),
+    ("TRAFFIC_VIOLATION", "교통위반", _T, _POL, "경비교통과",
+     "자동차·이륜차의 교통법규 위반."),
+    ("ABANDONED_VEHICLE", "방치차량", _T, _GOV, "경제교통과",
+     "장기 방치 차량, 번호판 훼손 차량 등."),
+    ("PARKING_LOT_ISSUE", "주차장 불편", _T, _GOV, "경제교통과",
+     "주차장 운영·주차질서·주차공간 불편."),
+    ("PUBLIC_TRANSPORT_ISSUE", "대중교통 운행 불편", _T, _GOV, "경제교통과",
+     "버스·택시·정류장 이용 불편."),
+    # 시설물
+    ("ROAD_DAMAGE", "도로 파손", _I, _GOV, "건설과",
+     "포트홀·균열·함몰 등 노면 손상."),
+    ("ROAD_FACILITY_DAMAGE", "도로시설 파손", _I, _GOV, "건설과",
+     "난간·중앙분리대·방호울타리 등 도로 부속물 파손."),
+    ("SIDEWALK_DAMAGE", "보도블록 파손", _I, _GOV, "건설과",
+     "보도블록·보행로 파손·침하·들뜸·단차."),
+    ("STREETLIGHT_FAILURE", "가로등 고장", _I, _GOV, "건설과",
+     "가로등·보안등 소등·점멸·파손."),
+    ("TRAFFIC_FACILITY_FAILURE", "교통시설물 고장", _I, _GOV, "경제교통과",
+     "신호등·횡단보도 시설·표지판 고장."),
+    ("MANHOLE_DRAIN_DAMAGE", "맨홀·배수구 파손", _I, _GOV, "건설과",
+     "맨홀 뚜껑·빗물받이 덮개·배수구 파손·이탈·함몰·막힘."),
+    ("PUBLIC_FACILITY_DAMAGE", "공공시설물 파손", _I, _GOV, "구조물관리과",
+     "벤치·펜스·안내판 등 공공시설물 파손."),
+    ("PUBLIC_USE_FACILITY_SAFETY", "다중이용시설 안전 문제", _I, _GOV, "구조물관리과",
+     "다중이용시설 내 안전 위험."),
+    ("OBSTRUCTION_ACCESS_BLOCKAGE", "장애물·통행 방해", _I, _GOV, "건설과",
+     "도로 이용 방해·낙하물·적치물."),
+    ("AGING_FACILITY_RISK", "노후 시설물 위험", _I, _GOV, "구조물관리과",
+     "교량·육교·옹벽 등 노후 구조물 위험."),
+    ("PARK_FACILITY_DAMAGE", "공원시설 파손", _I, _GOV, "녹지공원과",
+     "공원·놀이터·체육시설 내 시설물 파손."),
+    # 생활불편
+    ("WASTE_AND_DEBRIS", "쓰레기·폐기물", _L, _GOV, "환경자원과",
+     "쓰레기 무단투기·수거 불편·폐기물 방치."),
+    ("ILLEGAL_ADVERTISEMENT", "불법광고물", _L, _GOV, "도시미관과",
+     "현수막·전단지·불법 게시물."),
+    ("ODOR", "악취", _L, _GOV, "환경자원과",
+     "하수구·쓰레기·사업장 악취."),
+    ("NOISE", "소음", _L, _GOV, "환경자원과",
+     "일반 생활소음(공사장 소음은 공사장 대분류)."),
+    ("AIR_POLLUTION_DUST", "대기오염·비산먼지", _L, _GOV, "환경자원과",
+     "대기오염·비산먼지."),
+    ("WATER_POLLUTION_WASTEWATER", "수질오염·오폐수", _L, _GOV, "환경자원과",
+     "하천 오염·배수로 오염·오폐수."),
+    ("ILLEGAL_BURNING", "불법소각", _L, _GOV, "환경자원과",
+     "불법 소각(행위 기준 분리)."),
+    ("LIGHT_POLLUTION", "빛공해", _L, _GOV, "환경자원과",
+     "간판·조명·야간 빛 불편."),
+    ("PET_NUISANCE", "반려동물 불편", _L, _GOV, "위생안전과",
+     "배설물·목줄 미착용·짖음 등."),
+    # 생활안전
+    ("FLOODING_RISK", "침수 위험", _S, _GOV, "건설과",
+     "침수·빗물받이 막힘."),
+    ("SEWER_BACKFLOW", "하수도 역류", _S, _GOV, "건설과",
+     "하수 역류·배수 불량."),
+    ("RIVER_FACILITY_RISK", "하천 위험", _S, _GOV, "건설과",
+     "하천 범람·제방 위험."),
+    ("BEEHIVE_RISK", "벌집 위험", _S, _FIRE, "재난대응과",
+     "벌집 제거 등 119 생활안전 연계."),
+    ("STRAY_OR_DANGEROUS_ANIMAL", "유기동물·위험동물", _S, _GOV, "위생안전과",
+     "유기동물·위협 동물."),
+    ("FIRE_RISK", "화재위험", _S, _FIRE, "화재예방과",
+     "화재 가능성·연기·불씨 등."),
+    ("GAS_ELECTRIC_RISK", "가스·전기 위험", _S, _FIRE, "재난대응과",
+     "가스 누출·전기 스파크·감전 위험."),
+    # 공사장
+    ("CONSTRUCTION_SAFETY_VIOLATION", "공사장 안전조치 미흡", _C, _GOV, "건축과",
+     "안전펜스·표지·보행자 보호 미흡."),
+    ("CONSTRUCTION_NOISE", "공사장 소음", _C, _GOV, "환경자원과",
+     "공사장 소음(일반 소음과 분리)."),
+    ("CONSTRUCTION_CRACK_DAMAGE", "공사로 인한 균열", _C, _GOV, "건축과",
+     "건물·도로 균열, 피해 주장."),
+    ("CONSTRUCTION_ACCESS_BLOCKAGE", "공사장 통행 불편", _C, _GOV, "건축과",
+     "보행로 점유·우회 불편·도로 점용."),
+    # 치안
+    ("INTOXICATED_PERSON_CONCERN", "취객·주취자 불안", _P, _POL, "범죄예방대응과",
+     "취객·주취자 관련 불안."),
+    ("DISORDERLY_CONDUCT_DISPUTE", "행패소란·시비", _P, _POL, "범죄예방대응과",
+     "행패소란·노상다툼·시비·소란."),
+    ("SUSPICIOUS_ACTIVITY", "범죄의심·방범불안", _P, _POL, "범죄예방대응과",
+     "배회 의심·방범 불안·범죄 의심."),
+    ("ILLEGAL_FILMING_SUSPICION", "불법촬영 의심", _P, _POL, "여성청소년과",
+     "불법촬영 의심(즉시 경찰 안내 가능)."),
+    ("YOUTH_DELINQUENCY_DISTURBANCE", "청소년 비행·집단소란", _P, _POL, "여성청소년과",
+     "청소년 비행·집단 소란."),
+    # 보건복지
+    ("ACCESSIBILITY_FACILITY_ISSUE", "장애인 편의시설 불편", _H, _GOV, "사회복지과",
+     "경사로·점자블록·접근성 문제."),
+    ("PUBLIC_HYGIENE_ISSUE", "공중위생 불량", _H, _HLT, "보건행정과",
+     "공중화장실·업소 위생 등."),
+    ("FOOD_HYGIENE_REPORT", "식품위생 신고", _H, _HLT, "보건행정과",
+     "음식점·불량식품·위생 문제."),
+    ("PEST_CONTROL_ISSUE", "해충 문제", _H, _HLT, "감염병관리센터",
+     "모기·바퀴·방역 요청."),
+    ("VULNERABLE_PERSON_RISK", "노약자 위험 상황", _H, _GOV, "사회복지과",
+     "쓰러진 사람·보호 필요 상황."),
+    ("YOUTH_RISK_ENVIRONMENT", "청소년 위험 환경", _H, _GOV, "가정복지과",
+     "통학로·놀이터·유해환경."),
+    # 기타 (가상)
+    (ETC_OTHER, "기타", _E, _GOV, "시민봉사과",
+     "유효하나 위 유형에 맞지 않는 기타 제보(억지 분류 금지)."),
+    (INSUFFICIENT, "제보 불성립", _E, _GOV, "시민봉사과",
+     "내용·이미지 불충분/무관/확인불가하여 제보로 성립하지 않음."),
+]
+
 _LEAVES: list[CategoryLeaf] = [
-    CategoryLeaf(
-        code="ILLEGAL_PARKING",
-        ko="불법주정차",
-        parent=ParentCategory.TRAFFIC,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="교통행정과",
-        definition="주정차 금지구역·소화전·횡단보도 앞 등에 정차/주차된 차량.",
-        includes=["횡단보도 앞 차량", "소화전 앞 주차", "이중주차로 통행 방해"],
-        excludes=["사고로 멈춘 차량은 SUSPICIOUS/긴급", "도로 자체 손상은 ROAD_DAMAGE"],
-    ),
-    CategoryLeaf(
-        code="ROAD_DAMAGE",
-        ko="도로 파손",
-        parent=ParentCategory.TRAFFIC,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="도로관리과",
-        definition="포트홀·도로/인도 균열·보도블록 파손 등 노면 손상.",
-        includes=["포트홀", "보도블록 깨짐", "맨홀 뚜껑 파손"],
-        excludes=["가로등 손상은 STREETLIGHT", "낙상 유발 빙판/계단은 FALL_RISK"],
-    ),
-    CategoryLeaf(
-        code="TRASH_DUMPING",
-        ko="쓰레기 무단투기",
-        parent=ParentCategory.ENVIRONMENT,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="청소행정과",
-        definition="생활폐기물·대형폐기물의 무단 투기 및 적치.",
-        includes=["봉투 미사용 쓰레기 더미", "대형 폐가구 무단 배출"],
-        excludes=["동물 사체는 ANIMAL_CARCASS", "건축 적치물 위험은 DANGEROUS_FACILITY"],
-    ),
-    CategoryLeaf(
-        code="ANIMAL_CARCASS",
-        ko="동물 사체",
-        parent=ParentCategory.ENVIRONMENT,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="청소행정과",
-        definition="도로·보도 등에 방치된 동물 사체(로드킬 포함).",
-        includes=["도로 위 로드킬", "보도 옆 죽은 동물"],
-        excludes=["도로 위에 있어도 교통 아님 → 환경으로 분류", "살아있는 유기동물은 ETC_OTHER"],
-    ),
-    CategoryLeaf(
-        code="NOISE",
-        ko="소음",
-        parent=ParentCategory.ENVIRONMENT,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="환경과",
-        definition="공사·업소·차량 등으로 인한 생활 소음.",
-        includes=["야간 공사 소음", "상가 확성기 소음"],
-        excludes=["주취 소란 동반은 DRUNK_PERSON"],
-    ),
-    CategoryLeaf(
-        code="STREETLIGHT",
-        ko="가로등 고장",
-        parent=ParentCategory.FACILITY,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="도시안전과",
-        definition="가로등·보안등 소등·점멸·파손.",
-        includes=["가로등 꺼짐", "보안등 깜빡임"],
-        excludes=["조명 어두워 불안한 치안 우려는 SUSPICIOUS"],
-    ),
-    CategoryLeaf(
-        code="DANGEROUS_FACILITY",
-        ko="위험 시설물",
-        parent=ParentCategory.FACILITY,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="시설관리과",
-        definition="붕괴/추락/누전 우려가 있는 시설물·구조물·적치물.",
-        includes=["기울어진 옹벽", "떨어질 듯한 간판", "노출된 전선"],
-        excludes=["노면 파손은 ROAD_DAMAGE", "화재 진행 중은 FIRE_EMERGENCY"],
-    ),
-    CategoryLeaf(
-        code="FALL_RISK",
-        ko="낙상 위험",
-        parent=ParentCategory.LIVING,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="시설관리과",
-        definition="빙판·미끄럼·계단 등 보행자 낙상 유발 환경.",
-        includes=["결빙된 보도", "난간 없는 계단"],
-        excludes=["보도블록 파손 자체는 ROAD_DAMAGE"],
-    ),
-    CategoryLeaf(
-        code="DRUNK_PERSON",
-        ko="주취자",
-        parent=ParentCategory.PUBLIC_SAFETY,
-        default_agency_type=AgencyType.POLICE,
-        default_department="관할 지구대",
-        definition="음주 후 소란·노상 방치·위협 행위.",
-        includes=["길에 쓰러진 취객", "취중 시비"],
-        excludes=["단순 노숙은 HOMELESS", "복지 대상 판단은 HOMELESS"],
-    ),
-    CategoryLeaf(
-        code="YOUTH_RISK",
-        ko="청소년 위험",
-        parent=ParentCategory.PUBLIC_SAFETY,
-        default_agency_type=AgencyType.POLICE,
-        default_department="관할 지구대",
-        definition="청소년 비행·탈선·유해환경 노출 우려.",
-        includes=["심야 배회", "유해업소 출입 정황"],
-        excludes=["성인 주취는 DRUNK_PERSON"],
-    ),
-    CategoryLeaf(
-        code="SUSPICIOUS",
-        ko="수상한 상황",
-        parent=ParentCategory.PUBLIC_SAFETY,
-        default_agency_type=AgencyType.POLICE,
-        default_department="관할 지구대",
-        definition="신고 애매하나 불안한 정황(미행·은신·어두운 골목 등).",
-        includes=["골목에 숨은 사람 같음", "야간 우범 불안"],
-        excludes=["실제 범죄 진행 중은 emergencyGuide(112)로 안내"],
-    ),
-    CategoryLeaf(
-        code="HOMELESS",
-        ko="노숙",
-        parent=ParentCategory.WELFARE,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="복지정책과",
-        definition="노숙인 보호·복지 지원이 필요한 상황.",
-        includes=["역사/지하도 노숙", "한파 속 노상 취침"],
-        excludes=["음주 소란 동반은 DRUNK_PERSON"],
-    ),
-    CategoryLeaf(
-        code="FIRE_EMERGENCY",
-        ko="화재/응급",
-        parent=ParentCategory.DISASTER,
-        default_agency_type=AgencyType.FIRE,
-        default_department="119안전센터",
-        definition="화재·연기·붕괴·응급환자 등 즉시 대응이 필요한 상황.",
-        includes=["건물 연기", "쓰러진 사람", "가스 누출 냄새"],
-        excludes=["대부분 emergencyGuide(119) 우선 안내 대상"],
-    ),
-    CategoryLeaf(
-        code="ETC_OTHER",
-        ko="기타",
-        parent=ParentCategory.ETC,
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="민원실",
-        definition="유효한 제보이나 위 13개 세부 유형에 맞지 않는 기타 유형. 정상 처리 대상.",
-        includes=["기존 유형에 없는 실제 생활 문제"],
-        excludes=[
-            "내용·이미지가 불충분/무관/확인불가하면 INSUFFICIENT",
-            "억지로 끼워맞추지 말 것",
-        ],
-    ),
-    CategoryLeaf(
-        code="INSUFFICIENT",
-        ko="제보 불성립",
-        parent=ParentCategory.ETC,
-        # 라우팅하지 않음 — BE 가 검수/반려 큐로 보냄(아래 필드는 형식상 기본값).
-        default_agency_type=AgencyType.LOCAL_GOV,
-        default_department="민원실",
-        definition="내용·이미지가 불충분/무관/확인 불가하여 처리 가능한 제보로 성립하지 않음.",
-        includes=["내용/이미지 불충분", "문제 특정 불가", "무관한 사진/텍스트", "테스트성 입력"],
-        excludes=[
-            "문제를 식별할 수 있으면(흐릿해도) 해당 유형 + 낮은 confidence",
-            "유효하나 유형이 없으면 ETC_OTHER",
-            "의도적 허위/장난은 falseReport 로 별도 표기",
-        ],
-    ),
+    CategoryLeaf(code=c, ko=k, major=m, default_agency_type=a, default_department=d, definition=df)
+    for (c, k, m, a, d, df) in _LEAF_SPECS
 ]
 
 # --- 인덱스 & 파생 ------------------------------------------------------------
 CATEGORIES: dict[str, CategoryLeaf] = {leaf.code: leaf for leaf in _LEAVES}
 
-# enum 강제용 (pydantic 스키마 / OpenAI Structured Outputs 의 enum 제약에 사용)
+# enum 강제용 (pydantic 스키마 / OpenAI Structured Outputs 의 enum 제약).
 CategoryCode = StrEnum("CategoryCode", {code: code for code in CATEGORIES})
 
-# 경계 케이스 타이브레이크 규칙 (프롬프트에 명시) — 일관 분류의 핵심.
-TIE_BREAK_RULES: list[str] = [
-    "도로 위 동물 사체 → 교통이 아니라 ANIMAL_CARCASS(환경).",
-    "성인 주취 소란 → 복지가 아니라 DRUNK_PERSON(치안).",
-    "가로등/조명 고장 → 교통이 아니라 STREETLIGHT(시설물).",
-    "조명이 어두워 '불안'한 치안 우려 → STREETLIGHT 가 아니라 SUSPICIOUS(치안).",
-    "보도블록 파손 자체 → ROAD_DAMAGE, 그로 인한 빙판/미끄럼 → FALL_RISK.",
-    "유효하나 기존 유형에 맞지 않으면 ETC_OTHER(억지 분류 금지).",
-    "내용·이미지가 불충분/무관/확인불가하여 문제를 특정할 수 없으면 INSUFFICIENT(제보 불성립). "
-    "단, 흐릿해도 문제를 식별할 수 있으면 해당 유형 + 낮은 confidence.",
-]
+_MAJOR_TO_LEAVES: dict[MajorCategory, list[CategoryLeaf]] = {}
+for _leaf in _LEAVES:
+    _MAJOR_TO_LEAVES.setdefault(_leaf.major, []).append(_leaf)
 
 
 def leaf_codes() -> list[str]:
-    """허용 리프 코드 목록."""
+    """허용 리프 코드 목록(가상 코드 포함)."""
     return list(CATEGORIES.keys())
+
+
+def major_codes() -> list[MajorCategory]:
+    return list(MajorCategory)
 
 
 def get_leaf(code: str) -> CategoryLeaf:
@@ -239,30 +251,39 @@ def get_leaf(code: str) -> CategoryLeaf:
         raise KeyError(f"unknown category code: {code!r}") from exc
 
 
-def parent_of(code: str) -> ParentCategory:
-    return get_leaf(code).parent
+def parent_of(code: str) -> MajorCategory:
+    return get_leaf(code).major
 
 
-def department_of(code: str) -> str:
-    return get_leaf(code).default_department
+def minors_of(major: MajorCategory) -> list[CategoryLeaf]:
+    """대분류에 속한 소분류 리프 목록(정의 순서 유지)."""
+    return list(_MAJOR_TO_LEAVES.get(major, []))
+
+
+def is_virtual(code: str) -> bool:
+    return code in _VIRTUAL_CODES
 
 
 def agency_type_of(code: str) -> AgencyType:
     return get_leaf(code).default_agency_type
 
 
-def few_shot_block() -> str:
-    """프롬프트 주입용 카테고리 설명 블록 (코드/한글/정의/포함·제외)."""
-    lines: list[str] = []
-    for leaf in _LEAVES:
-        lines.append(
-            f"- {leaf.code} ({leaf.ko}, 대분류={leaf.parent.value}): {leaf.definition}"
-        )
-        if leaf.includes:
-            lines.append(f"    · 포함: {', '.join(leaf.includes)}")
-        if leaf.excludes:
-            lines.append(f"    · 제외: {'; '.join(leaf.excludes)}")
-    lines.append("")
-    lines.append("[타이브레이크 규칙]")
-    lines.extend(f"- {rule}" for rule in TIE_BREAK_RULES)
+def department_of(code: str) -> str:
+    return get_leaf(code).default_department
+
+
+def candidate_agency_types(major: MajorCategory) -> tuple[AgencyType, ...]:
+    """3차 단계에서 후보 부서를 조회할 기관유형 union."""
+    return _CANDIDATE_AGENCY_TYPES.get(major, (AgencyType.LOCAL_GOV,))
+
+
+def major_block() -> str:
+    """1차(대분류) 프롬프트용 블록."""
+    lines = [f"- {m.value} ({MAJOR_KO[m]}): {MAJOR_ROLE[m]}" for m in MajorCategory]
+    return "\n".join(lines)
+
+
+def minor_block(major: MajorCategory) -> str:
+    """2차(소분류) 프롬프트용 블록 — 해당 대분류의 소분류만."""
+    lines = [f"- {leaf.code} ({leaf.ko}): {leaf.definition}" for leaf in minors_of(major)]
     return "\n".join(lines)
