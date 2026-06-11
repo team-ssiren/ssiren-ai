@@ -24,8 +24,13 @@ class MajorResult(BaseModel):
 
 
 def build_minor_result_model(major: MajorCategory) -> type[BaseModel]:
-    """2차: 해당 대분류의 소분류(+ETC_OTHER 탈출구)로 제약된 결과 모델."""
-    codes = [leaf.code for leaf in taxonomy.minors_of(major)]
+    """2차: 해당 대분류의 소분류(+ETC_OTHER 탈출구)로 제약된 결과 모델.
+
+    INSUFFICIENT(제보 불성립)는 1차에서만 판정하므로 소분류 후보에서 제외한다.
+    """
+    codes = [
+        leaf.code for leaf in taxonomy.minors_of(major) if leaf.code != taxonomy.INSUFFICIENT
+    ]
     if taxonomy.ETC_OTHER not in codes:
         codes.append(taxonomy.ETC_OTHER)
     minor_type = Literal[tuple(codes)]  # type: ignore[valid-type]

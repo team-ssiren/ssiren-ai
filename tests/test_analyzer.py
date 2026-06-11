@@ -137,7 +137,36 @@ async def test_insufficient_short_circuits(monkeypatch):
     assert len(calls) == 1  # only the major call ran
     assert resp.category.categoryCode.value == "INSUFFICIENT"
     assert resp.resolvedAgency.name is None
+    assert resp.resolvedAgency.resolved is False
     assert resp.embedding == []
+
+
+@pytest.mark.anyio
+async def test_step2_insufficient_short_circuits(monkeypatch):
+    # 1차 통과(ETC) 후 2차가 INSUFFICIENT 를 내도 방어 가드로 단락 — 보강/해소 스킵.
+    from types import SimpleNamespace
+
+    seen = []
+
+    async def fake_cs(*, messages, schema, model=None, **kw):
+        seen.append(schema.__name__)
+        if schema is MajorResult:
+            return MajorResult(majorCode="ETC", confidence=0.6, insufficient=False)
+        if schema.__name__.startswith("MinorResult"):
+            return SimpleNamespace(minorCode="INSUFFICIENT", confidence=0.4)
+        raise AssertionError("enrich(3차) 가 호출되면 안 됨")
+
+    async def fake_empty(_c):
+        return []
+
+    monkeypatch.setattr(analyzer, "complete_structured", fake_cs)
+    monkeypatch.setattr(analyzer.similar_complaint, "find_top_similar_cases", fake_empty)
+
+    resp = await analyzer.analyze(analyzer.AnalyzeInput(content="x", latitude=0.0, longitude=0.0))
+    assert resp.category.categoryCode.value == "INSUFFICIENT"
+    assert resp.resolvedAgency.resolved is False
+    assert resp.embedding == []
+    assert "EnrichResult" not in seen  # 보강 단계 진입 안 함
 
 
 @pytest.mark.anyio

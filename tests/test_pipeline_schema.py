@@ -36,6 +36,17 @@ def test_minor_model_constrained_to_major():
         model(minorCode="ILLEGAL_PARKING", confidence=0.9)
 
 
+def test_insufficient_excluded_from_minor_enum():
+    # INSUFFICIENT 는 1차 전용 — 어떤 대분류의 2차 enum 에도 없어야 함(ETC 포함).
+    for major in MajorCategory:
+        model = build_minor_result_model(major)
+        with pytest.raises(ValidationError):
+            model(minorCode="INSUFFICIENT", confidence=0.5)
+    # ETC 대분류는 ETC_OTHER 만 허용
+    etc = build_minor_result_model(MajorCategory.ETC)
+    assert etc(minorCode="ETC_OTHER", confidence=0.5).minorCode == "ETC_OTHER"
+
+
 def test_enrich_model_constrains_department_to_candidates():
     model = build_enrich_result_model(["건설과", "환경자원과"])
     payload = {

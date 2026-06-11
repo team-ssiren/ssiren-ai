@@ -122,6 +122,11 @@ async def analyze(inp: AnalyzeInput) -> AnalyzeResponse:
         )
         minor_code: str = str(minor_res.minorCode)
 
+        # 방어: INSUFFICIENT 는 1차 전용 결정(2차 enum 에서 제외됨). 혹시 새어 나오면 단락.
+        if minor_code == INSUFFICIENT:
+            similar_task.cancel()
+            return _insufficient_response(occurred_at, _clamp(minor_res.confidence, 0.0, 1.0))
+
         # --- 컨텍스트: 가이드 + 후보 부서 (DB) ---
         agency_types = [t.value for t in taxonomy.candidate_agency_types(major)]
         guide_text, candidates = await asyncio.gather(
