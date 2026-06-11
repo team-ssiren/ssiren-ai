@@ -11,7 +11,7 @@ from app.services import embedder, public_complaint_client
 
 logger = logging.getLogger("ssairen.similar_complaint")
 
-MIN_SIMILARITY_SCORE = 0.75
+MIN_SIMILARITY_SCORE = 0.50
 TOP_K = 5
 
 
