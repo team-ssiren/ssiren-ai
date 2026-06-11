@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     chatbot_history_max_turns: int = Field(default=10)
     chatbot_title_max_chars: int = Field(default=10, description="Session title length cap")
 
+    # --- Data.go.kr ---
+    data_gokr_api_key: str = Field(default="", description="Public data portal service key")
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,11 +1,13 @@
 """Phase 2-2: analyzer pipeline (mocked LLM + embedder) and prompt assembly."""
 
 import io
+from datetime import datetime
 
 import pytest
 from PIL import Image
 
 from app.prompts.analyze import build_messages, get_system_prompt
+from app.schemas.public_complaint import RankedSimilarComplaintCase
 from app.schemas.report import AnalysisLLMOutput
 from app.services import analyzer
 
@@ -13,6 +15,14 @@ from app.services import analyzer
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _stub_similar_complaints(monkeypatch):
+    async def fake_find_top(_content):
+        return []
+
+    monkeypatch.setattr(analyzer.similar_complaint, "find_top_similar_cases", fake_find_top)
 
 
 async def _stub_embed(texts):
@@ -77,6 +87,65 @@ async def test_analyze_assembles_response_with_embedding(monkeypatch):
     # multimodal: image part injected into user message
     user_parts = captured["messages"][1]["content"]
     assert any(p["type"] == "image_url" for p in user_parts)
+
+
+@pytest.mark.anyio
+async def test_analyze_includes_similar_complaints_context(monkeypatch):
+    captured = {}
+
+    async def fake_find_top(content):
+        assert content == "도로가 파였어요"
+        return [
+            RankedSimilarComplaintCase(
+                title="포트홀 보수 요청",
+                content="도로에 포트홀이 있어 보수 요청합니다.",
+                createDate=datetime(2026, 4, 30, 14, 56, 25),
+                mainSubName="대전광역시 유성구",
+                departmentName="도로관리과",
+                embeddingScore=0.87,
+            )
+        ]
+
+    async def fake_cs(*, messages, schema, **kw):
+        captured["messages"] = messages
+        return _make_llm()
+
+    monkeypatch.setattr(analyzer.similar_complaint, "find_top_similar_cases", fake_find_top)
+    monkeypatch.setattr(analyzer, "complete_structured", fake_cs)
+    monkeypatch.setattr(analyzer.embedder, "embed", _stub_embed)
+
+    await analyzer.analyze(
+        analyzer.AnalyzeInput(content="도로가 파였어요", latitude=36.3665, longitude=127.3447)
+    )
+
+    user_text = captured["messages"][1]["content"][0]["text"]
+    assert "[공공데이터 유사 민원 사례 TOP5]" in user_text
+    assert "포트홀 보수 요청" in user_text
+    assert "departmentName: 도로관리과" in user_text
+    assert "similarityScore: 0.8700" in user_text
+
+
+@pytest.mark.anyio
+async def test_analyze_continues_when_similar_complaints_fail(monkeypatch):
+    captured = {}
+
+    async def fake_find_top(_content):
+        raise RuntimeError("boom")
+
+    async def fake_cs(*, messages, schema, **kw):
+        captured["messages"] = messages
+        return _make_llm()
+
+    monkeypatch.setattr(analyzer.similar_complaint, "find_top_similar_cases", fake_find_top)
+    monkeypatch.setattr(analyzer, "complete_structured", fake_cs)
+    monkeypatch.setattr(analyzer.embedder, "embed", _stub_embed)
+
+    resp = await analyzer.analyze(
+        analyzer.AnalyzeInput(content="도로가 파였어요", latitude=36.3665, longitude=127.3447)
+    )
+
+    assert resp.title == "궁동 도로 파손 제보"
+    assert "[공공데이터 유사 민원 사례 TOP5]" not in captured["messages"][1]["content"][0]["text"]
 
 
 @pytest.mark.anyio
@@ -154,9 +223,35 @@ def test_build_messages_without_images():
     assert "대학로 99" in user_parts[0]["text"]
 
 
+def test_build_messages_with_similar_complaints():
+    msgs = build_messages(
+        content="도로가 파였어요",
+        occurred_at="2026-06-05T15:30:00",
+        latitude=36.3,
+        longitude=127.3,
+        image_data_urls=[],
+        similar_complaints=[
+            RankedSimilarComplaintCase(
+                title="5분도 안되게 주차를 했는데 단속이 됐어요",
+                content="잠깐 급한 볼일때문에 5분도 안되게 주정차했는데 과태료가 날아왔어요",
+                createDate=datetime(2026, 4, 30, 14, 56, 25),
+                mainSubName="강원특별자치도 삼척시",
+                departmentName="교통과",
+                embeddingScore=0.87,
+            )
+        ],
+    )
+
+    text = msgs[1]["content"][0]["text"]
+    assert "similarityScore: 0.8700" in text
+    assert "mainSubName: 강원특별자치도 삼척시" in text
+    assert "departmentName: 교통과" in text
+
+
 def test_system_prompt_includes_taxonomy_and_rules():
     prompt = get_system_prompt()
     assert "ROAD_DAMAGE" in prompt
     assert "ETC_OTHER" in prompt
     assert "타이브레이크" in prompt
     assert "riskScore" in prompt
+    assert "공공데이터 유사 민원" in prompt

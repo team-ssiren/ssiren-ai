@@ -590,6 +590,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "openai" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -608,6 +609,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "openai", specifier = ">=1.55" },
     { name = "pillow", specifier = ">=10" },
     { name = "pydantic", specifier = ">=2.9" },
