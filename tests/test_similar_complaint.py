@@ -1,5 +1,7 @@
 """Public complaint similar-case lookup and normalization."""
 
+from datetime import datetime, timedelta
+
 import pytest
 
 from app.schemas.public_complaint import (
@@ -85,6 +87,17 @@ def test_cosine_similarity_handles_invalid_vectors():
     assert similar_complaint.cosine_similarity([0.0, 0.0], [1.0, 0.0]) is None
 
 
+def test_rerank_score_components():
+    now = datetime(2026, 6, 11)
+
+    assert similar_complaint.calculate_department_score("성남소방서 119안전센터") == 10.0
+    assert similar_complaint.calculate_department_score("일반민원실") == 0.0
+    assert similar_complaint.calculate_recency_score(now - timedelta(days=100), now) == 10.0
+    assert similar_complaint.calculate_recency_score(now - timedelta(days=800), now) == 7.0
+    assert similar_complaint.calculate_recency_score(None, now) == 0.0
+    assert similar_complaint.calculate_rerank_score(0.8, 10.0, 10.0) == 84.0
+
+
 @pytest.mark.anyio
 async def test_find_top_similar_cases_ranks_by_embedding_score(monkeypatch):
     async def fake_search(_user_text):
@@ -118,6 +131,31 @@ async def test_find_top_similar_cases_ranks_by_embedding_score(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_find_top_similar_cases_reranks_with_department_bonus(monkeypatch):
+    async def fake_search(_user_text):
+        return [
+            _case("임베딩만 높은 사례", "도로 파손", department_name="일반민원실"),
+            _case("부서 가점 사례", "도로 보수", department_name="건설과"),
+        ]
+
+    async def fake_embed(_texts):
+        return [
+            [1.0, 0.0],
+            [0.9, 0.435889],
+            [0.8, 0.6],
+        ]
+
+    monkeypatch.setattr(similar_complaint, "search_similar_cases", fake_search)
+    monkeypatch.setattr(similar_complaint.embedder, "embed", fake_embed)
+
+    ranked_cases = await similar_complaint.find_top_similar_cases("도로 파손 신고")
+
+    assert [case.title for case in ranked_cases] == ["부서 가점 사례", "임베딩만 높은 사례"]
+    assert ranked_cases[0].departmentScore == 10.0
+    assert ranked_cases[0].rerankScore > ranked_cases[1].rerankScore
+
+
+@pytest.mark.anyio
 async def test_find_top_similar_cases_returns_empty_on_embedding_failure(monkeypatch):
     async def fake_search(_user_text):
         return [_case("도로", "파손")]
@@ -145,12 +183,16 @@ async def test_find_top_similar_cases_returns_empty_on_embedding_count_mismatch(
     assert await similar_complaint.find_top_similar_cases("도로") == []
 
 
-def _case(title: str, content: str) -> SimilarComplaintCase:
+def _case(
+    title: str,
+    content: str,
+    department_name: str | None = None,
+) -> SimilarComplaintCase:
     return SimilarComplaintCase(
         title=title,
         content=content,
         createDate=None,
         mainSubName=None,
-        departmentName=None,
+        departmentName=department_name,
         embeddingText=f"{title}\n{content}",
     )

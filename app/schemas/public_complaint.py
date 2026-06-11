@@ -62,7 +62,7 @@ class SimilarComplaintCase(BaseModel):
 
 
 class RankedSimilarComplaintCase(BaseModel):
-    """Similar complaint case ranked by embedding similarity."""
+    """Similar complaint case ranked by embedding similarity and lightweight rerank rules."""
 
     title: str
     content: str
@@ -70,12 +70,18 @@ class RankedSimilarComplaintCase(BaseModel):
     mainSubName: str | None
     departmentName: str | None
     embeddingScore: float
+    recencyScore: float = 0.0
+    departmentScore: float = 0.0
+    rerankScore: float = 0.0
 
     @classmethod
     def from_case(
         cls,
         case: SimilarComplaintCase,
         embedding_score: float,
+        recency_score: float = 0.0,
+        department_score: float = 0.0,
+        rerank_score: float = 0.0,
     ) -> RankedSimilarComplaintCase:
         return cls(
             title=case.title,
@@ -84,6 +90,9 @@ class RankedSimilarComplaintCase(BaseModel):
             mainSubName=case.mainSubName,
             departmentName=case.departmentName,
             embeddingScore=embedding_score,
+            recencyScore=recency_score,
+            departmentScore=department_score,
+            rerankScore=rerank_score,
         )
 
 
