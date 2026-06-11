@@ -41,32 +41,31 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 
 ### 공통 enum
 
-**categoryCode** (리프, AI 는 이 중 하나만 선택)
+**majorCode** (대분류, 8종) — AI 1차 분류
 
-| code | 한글 | 대분류(parent) | 기본 기관유형 | 기본 부서 |
-| --- | --- | --- | --- | --- |
-| ILLEGAL_PARKING | 불법주정차 | 교통 | 지자체 | 교통행정과 |
-| ROAD_DAMAGE | 도로 파손 | 교통 | 지자체 | 도로관리과 |
-| TRASH_DUMPING | 쓰레기 무단투기 | 환경 | 지자체 | 청소행정과 |
-| ANIMAL_CARCASS | 동물 사체 | 환경 | 지자체 | 청소행정과 |
-| NOISE | 소음 | 환경 | 지자체 | 환경과 |
-| STREETLIGHT | 가로등 고장 | 시설물 | 지자체 | 도시안전과 |
-| DANGEROUS_FACILITY | 위험 시설물 | 시설물 | 지자체 | 시설관리과 |
-| FALL_RISK | 낙상 위험 | 생활불편 | 지자체 | 시설관리과 |
-| DRUNK_PERSON | 주취자 | 치안 | 경찰 | 관할 지구대 |
-| YOUTH_RISK | 청소년 위험 | 치안 | 경찰 | 관할 지구대 |
-| SUSPICIOUS | 수상한 상황 | 치안 | 경찰 | 관할 지구대 |
-| HOMELESS | 노숙 | 복지 | 지자체 | 복지정책과 |
-| FIRE_EMERGENCY | 화재/응급 | 재난안전 | 소방 | 119안전센터 |
-| ETC_OTHER | 기타 | 기타 | 지자체 | 민원실 |
-| INSUFFICIENT | 제보 불성립 | 기타 | (라우팅 안 함) | (검수/반려) |
+| code | 한글 | 역할 |
+| --- | --- | --- |
+| TRAFFIC | 교통 | 차량·주차·교통질서 |
+| INFRASTRUCTURE_ROAD | 시설물 | 도로·보도·교통시설·공공시설 파손·고장 |
+| LIVING_INCONVENIENCE | 생활불편 | 쓰레기·광고물·소음·악취·오염 |
+| LIFE_SAFETY | 생활안전 | 침수·벌집·동물·화재·가스·전기 위험 |
+| CONSTRUCTION_SITE | 공사장 | 공사장 안전·소음·균열·통행불편 |
+| PUBLIC_ORDER | 치안 | 취객·소란·범죄의심·방범불안 |
+| PUBLIC_HEALTH_WELFARE | 보건복지 | 위생·식품·장애인 편의시설·취약계층 |
+| ETC | 기타 | 기타·제보 불성립 |
+
+**categoryCode** (소분류 리프, 47종 + 가상 `ETC_OTHER`/`INSUFFICIENT`) — AI 2차 분류.
+전체 코드셋의 SSOT 는 `app/core/taxonomy.py` 와 `docs/rules/database/<majorCode>/<categoryCode>.md` 폴더 구조다.
+
+**agencyType** (기관유형, `resolvedAgency.agencyType`): `지자체` | `경찰` | `소방` | `보건`
 
 **action** (챗봇 plan): `ANSWER_DIRECT` | `SEARCH_NEARBY` | `MY_REPORTS`
 
-> 기관유형·부서는 AI 가 반환하지 않는다. BE 가 위 표의 `categoryCode → 기본 기관유형/기본 부서` 매핑과 위치(관할)로 해소한다.
+> **분석 흐름(다단계)**: 1차 대분류 → 2차 소분류 → (할당 가이드 + 유사 사례) → 3차 보강 아웃풋 + **담당 부서 결정**(후보 부서로 enum 제약) → AI 전용 SQLite 조직표로 실제 기관·부서 해소(기관유형은 부서에서 도출).
+> AI 는 `resolvedAgency`(부서·기관유형은 AI 결정, name·phone은 조직표 해소) 하나로 배정을 반환한다. BE 는 이를 사용하되 카테고리 기반 관할 매핑은 BE 정책을 유지할 수 있다.
 >
-> - **`ETC_OTHER`**: 유효하지만 기존 13개 유형에 맞지 않는 기타 제보 → **정상 처리**(민원실 라우팅, 지도·통계 포함).
-> - **`INSUFFICIENT`**: 내용·이미지 불충분/무관/확인불가로 **제보로 성립하지 않음** → BE 가 라우팅하지 않고 **검수/반려 큐**로 보냄(지도·통계 제외). 표의 기관/부서는 형식상 기본값.
+> - **`ETC_OTHER`**: 유효하지만 기존 유형에 맞지 않는 기타 제보 → **정상 처리**.
+> - **`INSUFFICIENT`**: 내용·이미지 불충분/무관/확인불가로 **제보로 성립하지 않음** → BE 가 라우팅하지 않고 **검수/반려 큐**로. 1차에서 단락되어 분류/해소 단계를 건너뛴다.
 > - 의도적 허위·장난 여부는 카테고리와 별개로 `analysis.falseReport` 로 표기된다(공존 가능).
 
 ---
@@ -145,7 +144,8 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
   },
   "keywords": ["맨홀 파손", "도로 파손", "보도 위험", "추락 위험"],
   "category": {
-    "categoryCode": "ROAD_DAMAGE",
+    "majorCode": "INFRASTRUCTURE_ROAD",
+    "categoryCode": "MANHOLE_DRAIN_DAMAGE",
     "confidence": 0.96
   },
   "riskScore": 72.0,
@@ -161,8 +161,16 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
       "message": null
     }
   },
+  "assignmentReason": "맨홀·빗물받이 등 공공하수도 시설의 유지관리는 하수도법 제3조에 따라 공공하수도 관리청인 분당구청의 책무이다. 도로상 맨홀 파손의 임시 안전조치 및 보수는 분당구청 건설과의 소관 사무이다.",
   "occurredAt": "2026-06-05T15:30:00",
-  "embedding": [0.013, -0.024, "...(총 1536개)"]
+  "embedding": [0.013, -0.024, "...(총 1536개)"],
+  "resolvedAgency": {
+    "agencyType": "지자체",
+    "department": "건설과",
+    "name": "분당구청",
+    "phone": "031 729 7381",
+    "resolved": true
+  }
 }
 ```
 
@@ -181,8 +189,9 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | contents.summary | `String` | 상황을 한 문장으로 요약 |
 | keywords | `String[]` | 핵심 키워드(3~6개) |
 | category | `Object` | 분류 결과 |
-| category.categoryCode | `String(enum)` | 리프 카테고리 코드(공통 enum 참조) |
-| category.confidence | `Decimal` | 분류 확신도(0.0~1.0) |
+| category.majorCode | `String(enum)` | 대분류 코드(8종, 공통 enum 참조) |
+| category.categoryCode | `String(enum)` | 소분류 리프 코드(공통 enum 참조) |
+| category.confidence | `Decimal` | 소분류 확신도(0.0~1.0) |
 | riskScore | `Decimal` | 위험 점수(0~100) |
 | analysis | `Object` | AI 분석 부가 결과 |
 | analysis.detectedObjects | `String[]` | 이미지에서 감지된 객체. 이미지 없으면 `[]` |
@@ -193,10 +202,19 @@ Spring 백엔드(BE)가 호출하는 **내부 AI 서버(FastAPI)** 의 API 명�
 | analysis.emergencyGuide | `Object` | 긴급 신고 안내 |
 | analysis.emergencyGuide.isEmergency | `Boolean` | 긴급 상황 여부 |
 | analysis.emergencyGuide.message | `String` | 긴급 시 112/119 안내 문구. 아니면 `null` |
+| assignmentReason | `String` | 해당 부서로 배정한 근거(법령·소관·유사 사례 기반, 단정형) |
 | occurredAt | `String` | 서버가 해소한 발생 시각(요청값 또는 서버 기본값). `contents.when` 과 동일 출처이므로 BE 는 이 값을 `reportDraft.occurredAt` 으로 그대로 사용 |
 | embedding | `Decimal[]` | text-embedding-3-small 임베딩 벡터(1536차원, unit-norm). BE 가 중복판단·저장에 사용 |
+| resolvedAgency | `Object` | 배정된 기관·부서. `department`/`agencyType` 은 **항상 AI 결정값**, `name`/`phone` 은 조직표 해소 시 채움 |
+| resolvedAgency.agencyType | `String\|null` | 기관유형(`지자체`/`경찰`/`소방`/`보건`). 부서에서 도출 |
+| resolvedAgency.department | `String\|null` | 부서명(AI 결정, 후보 부서로 제약). 불성립 시 null |
+| resolvedAgency.name | `String\|null` | 전체기관명(예: 분당구청). 해소 시 |
+| resolvedAgency.phone | `String\|null` | 부서 전화(없으면 기관 전화) |
+| resolvedAgency.resolved | `Boolean` | 조직표에서 실제 기관 행을 찾았는지(`false`면 name/phone null) |
 
-> BE 처리: `categoryCode` 로 `categoryId`·`parentCategory`·`departmentName`·실기관을 매핑하고, 주소(`roadAddress` 등)는 자체 역지오코딩 값을 사용한다. `embedding` 은 별도 임베딩 호출 없이 중복판단/저장에 바로 활용한다.
+> BE 처리: `categoryCode`·`majorCode` 로 분류를 매핑한다. 기관/부서는 AI 의 `resolvedAgency`(분당 시드)를 사용하되, 카테고리 기반 관할 매핑은 BE 정책을 유지할 수 있다. `embedding` 은 별도 임베딩 호출 없이 중복판단/저장에 바로 활용한다.
+> 별도의 `suggestedAgencyType`/`suggestedDepartment` 필드는 제거되었다 — AI 의 부서 결정은 `resolvedAgency.department`(+`agencyType`)가 단일 출처이며, `resolved=false`여도 그 값은 보존된다.
+> ⚠️ 새 코드셋(8 대분류 / 47 소분류)은 BE 의 `report_categories` 시드와 동기화가 필요하다(BE 측 별도 작업).
 
 ---
 
