@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     # --- SQLite (AI-only: assignment guide + org directory) ---
     sqlite_db_path: str = Field(default="data/ssiren.db", description="AI-only SQLite DB path")
     org_default_region_code: str = Field(
-        default="BUNDANG", description="Region key for org resolution (seed scope)"
+        default="SUJI", description="Region key for org resolution (seed scope)"
     )
 
 

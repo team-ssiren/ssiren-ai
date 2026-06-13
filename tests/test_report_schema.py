@@ -28,13 +28,13 @@ VALID_LLM = {
         "falseReport": {"isSuspicious": False, "score": 8.2, "reason": "연관성 높음"},
         "emergencyGuide": {"isEmergency": False, "message": None},
     },
-    "assignmentReason": "맨홀·보도 시설 보수는 건설과의 소관 사무이다.",
+    "assignmentReason": "맨홀·보도 시설 보수는 건설도로과의 소관 사무이다.",
 }
 
 _RESOLVED = {
     "agencyType": "지자체",
-    "department": "건설과",
-    "name": "분당구청",
+    "department": "건설도로과",
+    "name": "수지구청",
     "phone": "031 729 7381",
     "resolved": True,
 }
@@ -63,7 +63,7 @@ def test_response_adds_embedding_and_occurred_at():
     )
     assert len(resp.embedding) == 1024
     assert resp.occurredAt == "2026-05-28T07:40:00"
-    assert resp.resolvedAgency.name == "분당구청"
+    assert resp.resolvedAgency.name == "수지구청"
     assert resp.resolvedAgency.resolved is True
     # contract field names present (camelCase)
     dumped = resp.model_dump()

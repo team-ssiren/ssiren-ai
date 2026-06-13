@@ -48,17 +48,17 @@ def test_insufficient_excluded_from_minor_enum():
 
 
 def test_enrich_model_constrains_department_to_candidates():
-    model = build_enrich_result_model(["건설과", "환경자원과"])
+    model = build_enrich_result_model(["건설도로과", "산업환경과"])
     payload = {
         "title": "t",
         "contents": _CONTENTS,
         "keywords": ["k"],
         "riskScore": 50.0,
         "analysis": _ANALYSIS,
-        "suggestedDepartment": "건설과",
-        "assignmentReason": "건설과의 소관 사무이다.",
+        "suggestedDepartment": "건설도로과",
+        "assignmentReason": "건설도로과의 소관 사무이다.",
     }
-    assert model(**payload).suggestedDepartment == "건설과"
+    assert model(**payload).suggestedDepartment == "건설도로과"
     with pytest.raises(ValidationError):
         model(**{**payload, "suggestedDepartment": "없는과"})
 
