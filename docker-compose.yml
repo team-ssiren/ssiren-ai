@@ -7,3 +7,10 @@ services:
       - .env
     ports:
       - "8000:8000"
+    networks:
+      - ssiren-network
+
+networks:
+  ssiren-network:
+    external: true
+    name: ssiren-network
