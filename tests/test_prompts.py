@@ -14,7 +14,7 @@ LOC = build_location_block(
     longitude=127.11,
     road_address="경기 성남시 분당구 판교역로 166",
     sido="경기도",
-    sigungu="성남시 분당구",
+    sigungu="용인시 수지구",
     eupmyeondong="백현동",
 )
 
@@ -53,12 +53,12 @@ def test_enrich_messages_inject_guide_candidates_similar():
             title="맨홀 보수",
             content="맨홀 뚜껑 파손",
             createDate=datetime(2026, 4, 30),
-            mainSubName="성남시 분당구",
-            departmentName="건설과",
+            mainSubName="용인시 수지구",
+            departmentName="건설도로과",
             embeddingScore=0.91,
         )
     ]
-    candidates = [DepartmentRow("지자체", "분당구청", "건설과", "031-1")]
+    candidates = [DepartmentRow("지자체", "수지구청", "건설도로과", "031-1")]
     msgs = build_enrich_messages(
         major=MajorCategory.INFRASTRUCTURE_ROAD,
         minor_code="MANHOLE_DRAIN_DAMAGE",
@@ -72,7 +72,7 @@ def test_enrich_messages_inject_guide_candidates_similar():
     )
     text = msgs[1]["content"][0]["text"]
     assert "[기관·부서 배정 근거자료]" in text and "맨홀 배정 가이드 본문" in text
-    assert "[선택 가능한 부서 후보]" in text and "건설과" in text
+    assert "[선택 가능한 부서 후보]" in text and "건설도로과" in text
     assert "[공공데이터 유사 민원 사례 TOP5]" in text and "맨홀 보수" in text
     assert "MANHOLE_DRAIN_DAMAGE" in text
     assert any(p["type"] == "image_url" for p in msgs[1]["content"])

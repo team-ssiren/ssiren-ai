@@ -23,7 +23,7 @@ def _img_bytes(w: int = 20, h: int = 20) -> bytes:
     return buf.getvalue()
 
 
-def _enrich_payload(risk=62.5, fscore=8.0, dept="건설과"):
+def _enrich_payload(risk=62.5, fscore=8.0, dept="건설도로과"):
     return {
         "title": "판교 도로 파손 제보",
         "contents": {
@@ -39,7 +39,7 @@ def _enrich_payload(risk=62.5, fscore=8.0, dept="건설과"):
             "emergencyGuide": {"isEmergency": False, "message": None},
         },
         "suggestedDepartment": dept,
-        "assignmentReason": "도로 시설 보수는 건설과의 소관 사무이다.",
+        "assignmentReason": "도로 시설 보수는 건설도로과의 소관 사무이다.",
     }
 
 
@@ -82,12 +82,12 @@ def _install_stubs(
     monkeypatch.setattr(
         analyzer.repository,
         "list_departments",
-        lambda types, region: [DepartmentRow("지자체", "분당구청", "건설과", "031 729 7381")],
+        lambda types, region: [DepartmentRow("지자체", "수지구청", "건설도로과", "031 729 7381")],
     )
     monkeypatch.setattr(
         analyzer.repository,
         "resolve_org",
-        lambda region, dept: OrgRow("분당구청", "건설과", "031 729 7381", "지자체"),
+        lambda region, dept: OrgRow("수지구청", "건설도로과", "031 729 7381", "지자체"),
     )
     return calls
 
@@ -107,9 +107,9 @@ async def test_three_step_assembly(monkeypatch):
     assert len(calls) == 3  # major, minor, enrich
     assert resp.category.majorCode.value == "INFRASTRUCTURE_ROAD"
     assert resp.category.categoryCode.value == "ROAD_DAMAGE"
-    assert resp.resolvedAgency.department == "건설과"
+    assert resp.resolvedAgency.department == "건설도로과"
     assert resp.resolvedAgency.agencyType == "지자체"
-    assert resp.resolvedAgency.name == "분당구청"
+    assert resp.resolvedAgency.name == "수지구청"
     assert resp.resolvedAgency.phone == "031 729 7381"
     assert resp.resolvedAgency.resolved is True
     assert len(resp.embedding) == 1536
@@ -176,8 +176,8 @@ async def test_similar_complaints_injected_into_enrich(monkeypatch):
             title="포트홀 보수 요청",
             content="도로에 포트홀이 있어 보수 요청합니다.",
             createDate=datetime(2026, 4, 30),
-            mainSubName="성남시 분당구",
-            departmentName="건설과",
+            mainSubName="용인시 수지구",
+            departmentName="건설도로과",
             embeddingScore=0.87,
         )
     ]
@@ -189,7 +189,7 @@ async def test_similar_complaints_injected_into_enrich(monkeypatch):
     assert "[공공데이터 유사 민원 사례 TOP5]" in enrich_text
     assert "포트홀 보수 요청" in enrich_text
     assert "[선택 가능한 부서 후보]" in enrich_text
-    assert "건설과" in enrich_text
+    assert "건설도로과" in enrich_text
 
 
 @pytest.mark.anyio
